@@ -51,10 +51,15 @@ extern __constant__ KernelConstants kernel_constants;
 __global__ void erosion(uint8_t __restrict__ *dispersion_mask_ptr,
                         // uint8_t __restrict__ *mask,
                         size_t dispersion_mask_pitch,
+                        uint8_t __restrict__ *erosion_mask_ptr,
+                        // uint8_t __restrict__ *mask,
+                        size_t erosion_mask_pitch,
                         uint8_t radius) {
     // Create pitched arrays for data access
     PitchedArray2D<uint8_t> dispersion_mask{dispersion_mask_ptr,
                                             &dispersion_mask_pitch};
+    PitchedArray2D<uint8_t> erosion_mask{erosion_mask_ptr,
+                                            &erosion_mask_pitch};
 
     // Calculate the pixel coordinates
     auto block = cg::this_thread_block();
@@ -97,7 +102,7 @@ __global__ void erosion(uint8_t __restrict__ *dispersion_mask_ptr,
          * If the pixel is masked, we want to set it to VALID_PIXEL
          * in order to invert the mask.
         */
-        dispersion_mask(x, y) = VALID_PIXEL;
+        erosion_mask(x, y) = VALID_PIXEL;
         return;
     }
 
@@ -144,7 +149,7 @@ termination:
          * considered as a background pixel in the background calculation as it is not
          * considered part of the signal.
         */
-        dispersion_mask(x, y) = VALID_PIXEL;
+        erosion_mask(x, y) = VALID_PIXEL;
     } else {
         /*
          * If the pixel should not be erased, this means that it is part of the signal.
@@ -153,7 +158,7 @@ termination:
         */
 
         // Invert 'valid' signal spot to 'masked' background spots
-        dispersion_mask(x, y) = !shared_mask(local_x, local_y);
+        erosion_mask(x, y) = !shared_mask(local_x, local_y);
     }
 }
 #pragma enregion Erosion kernel
