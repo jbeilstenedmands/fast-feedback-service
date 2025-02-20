@@ -4,7 +4,7 @@
 #include <dx2/detector.h>
 #include <dx2/experiment.h>
 #include <dx2/goniometer.h>
-#include <dx2/h5read_processed.h>
+#include <dx2/h5/h5read_processed.hpp>
 #include <dx2/scan.h>
 #include <fmt/color.h>
 #include <fmt/core.h>
@@ -67,6 +67,21 @@ void calc_score(Crystal const &crystal,
   auto postfilter = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_timefilter = postfilter - prefilter;
   std::cout << "Time for reflection_filter: " << elapsed_timefilter.count() << " s" << std::endl;
+
+  // Do the refinement
+  // First make CrystalOrientationParameterisation, CrystalUnitCellParameterisation, BeamParameterisation,
+  // DetectorParameterisationSinglePanel,
+  
+  // Then make SimplePredictionParam
+  // Then set the crystal U, B in the expt object.
+  // gradients = pred.get_gradients(obs)
+  
+  // Encapsulate those in a simple target, with a parameter vector.
+  // That can calc resids and gradients which are input to a least-squares routine - use Eigen (lev mar)?
+  // As part of residuals, it updates the parameterisation objects, updates the experiment objects
+  // and runs the simple predictor on the reflection data.
+
+
   //write the score to the results map
   double xsum = 0;
   double ysum = 0;
