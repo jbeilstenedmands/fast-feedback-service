@@ -38,7 +38,40 @@ using Eigen::Vector3d;
 using Eigen::Vector3i;
 using json = nlohmann::json;
 
+#include <unsupported/Eigen/NonLinearOptimization>
+#include <unsupported/Eigen/NumericalDiff>
+
 std::mutex mtx;
+
+// Implement y = (x-5)^2
+struct MyFunctor
+{
+    typedef float Scalar;
+
+    typedef Eigen::VectorXf InputType;
+    typedef Eigen::VectorXf ValueType;
+    typedef Eigen::Matrix<Scalar,Eigen::Dynamic,Eigen::Dynamic> JacobianType;
+
+    enum {
+        InputsAtCompileTime = Eigen::Dynamic,
+        ValuesAtCompileTime = Eigen::Dynamic
+    };
+
+    int operator()(const Eigen::VectorXf &x, Eigen::VectorXf &fvec) const
+    {
+        // We provide f(x) = x-5 because the algorithm will square this value internally
+        fvec(0) = x(0) - 5.0;
+        return 0;
+    }
+
+    int df(const Eigen::VectorXf &x, Eigen::MatrixXf &fjac) const {
+      fjac(0,0) = 1;
+      return 0;
+    }
+
+    int inputs() const { return 1; }// inputs is the dimension of x.
+    int values() const { return 1; } // "values" is the number of f_i and
+};
 
 struct score_and_crystal {
     double score;
@@ -69,9 +102,11 @@ void calc_score(Crystal const &crystal,
   std::cout << "Time for reflection_filter: " << elapsed_timefilter.count() << " s" << std::endl;
 
   // Do the refinement
+
+
   // First make CrystalOrientationParameterisation, CrystalUnitCellParameterisation, BeamParameterisation,
   // DetectorParameterisationSinglePanel,
-  
+  //SimpleBParameterisation B_param {crystal.get_space_group()};
   // Then make SimplePredictionParam
   // Then set the crystal U, B in the expt object.
   // gradients = pred.get_gradients(obs)
@@ -80,6 +115,22 @@ void calc_score(Crystal const &crystal,
   // That can calc resids and gradients which are input to a least-squares routine - use Eigen (lev mar)?
   // As part of residuals, it updates the parameterisation objects, updates the experiment objects
   // and runs the simple predictor on the reflection data.
+
+  Eigen::VectorXf x(1);
+  x(0) = 2;
+  std::cout << "x: " << x << std::endl;
+  MyFunctor myFunctor;
+  Eigen::LevenbergMarquardt<MyFunctor, float> levenbergMarquardt(myFunctor);
+
+  levenbergMarquardt.parameters.ftol = 1e-6;
+  levenbergMarquardt.parameters.xtol = 1e-6;
+  levenbergMarquardt.parameters.maxfev = 10; // Max iterations
+
+  Eigen::VectorXf xmin = x; // initialize
+  levenbergMarquardt.minimize(xmin);
+
+  std::cout << "x that minimizes the function: " << xmin << std::endl;
+
 
 
   //write the score to the results map
@@ -190,8 +241,13 @@ int main(int argc, char** argv) {
                      ex.byte);
         std::exit(1);
     }
-
-    Experiment<MonochromaticBeam> expt(elist_json_obj);
+    Experiment<MonochromaticBeam> expt;
+    try {
+        expt = Experiment<MonochromaticBeam>(elist_json_obj);
+    } catch (std::invalid_argument const& ex){
+        logger->error("Unable to create MonochromaticBeam experiment: {}", ex.what());
+        std::exit(1);
+    }
     Scan scan = expt.scan();
     MonochromaticBeam beam = expt.beam();
     Goniometer gonio = expt.goniometer();
