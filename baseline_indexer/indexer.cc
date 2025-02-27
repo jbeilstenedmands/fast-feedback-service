@@ -24,6 +24,7 @@
 #include "common.hpp"
 #include "fft3d.cc"
 #include "flood_fill.cc"
+#include "refinement/Bparameterisation.h"
 #include "gemmi/symmetry.hpp"
 #include "sites_to_vecs.cc"
 #include "xyz_to_rlp.cc"
@@ -106,7 +107,7 @@ void calc_score(Crystal const &crystal,
 
   // First make CrystalOrientationParameterisation, CrystalUnitCellParameterisation, BeamParameterisation,
   // DetectorParameterisationSinglePanel,
-  //SimpleBParameterisation B_param {crystal.get_space_group()};
+  SimpleBParameterisation B_param{crystal};
   // Then make SimplePredictionParam
   // Then set the crystal U, B in the expt object.
   // gradients = pred.get_gradients(obs)
