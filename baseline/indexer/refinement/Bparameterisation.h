@@ -10,6 +10,7 @@
 #include <gemmi/cellred.hpp>
 #include <gemmi/scaling.hpp> // for constraints
 #include <dx2/crystal.h>
+#include <iostream>
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 
@@ -52,7 +53,9 @@ void SymmetrizeReduceEnlarge::set_orientation(Matrix3d B) {
 }
 
 std::array<double, 6> SymmetrizeReduceEnlarge::forward_independent_parameters() {
+  std::cout << "Calling Bconv" << std::endl;
   Bconverter.forward(orientation_);
+  std::cout << Bconverter.G.u11 << " "<< Bconverter.G.u22 << " "<< Bconverter.G.u33 << " " << std::endl;
   return constraints_.independent_params(Bconverter.G);
 }
 
@@ -89,6 +92,7 @@ void SimpleBParameterisation::compose() {
 SimpleBParameterisation::SimpleBParameterisation(const Crystal &crystal)
     : B_(crystal.get_B_matrix()), SRE(crystal.get_space_group()) {
   // first get params
+  std::cout << "SetB " << B_ << std::endl;
   SRE.set_orientation(B_);
   std::array<double, 6> X = SRE.forward_independent_parameters();
   params = std::vector<double>(X.size());

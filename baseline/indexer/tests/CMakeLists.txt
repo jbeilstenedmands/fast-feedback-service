@@ -16,7 +16,13 @@ add_executable(test_peaks_to_rlvs test_peaks_to_rlvs.cc)
 target_include_directories(test_peaks_to_rlvs PRIVATE "${PROJECT_SOURCE_DIR}")
 target_link_libraries(test_peaks_to_rlvs GTest::gtest_main fmt dx2 Eigen3::Eigen spdlog::spdlog)
 
+add_executable(test_Bparameterisation test_Bparameterisation.cc)
+target_include_directories(test_Bparameterisation PRIVATE "${PROJECT_SOURCE_DIR}")
+target_link_libraries(test_Bparameterisation GTest::gtest_main dx2 Eigen3::Eigen)
+
+
 gtest_discover_tests(test_xyz_to_rlp PROPERTIES LABELS baseline-indexer-tests)
 gtest_discover_tests(test_flood_fill PROPERTIES LABELS baseline-indexer-tests)
 gtest_discover_tests(test_fft3d PROPERTIES LABELS baseline-indexer-tests)
 gtest_discover_tests(test_peaks_to_rlvs PROPERTIES LABELS baseline-indexer-tests)
+gtest_discover_tests(test_Bparameterisation PROPERTIES LABELS baseline-indexer-tests)
