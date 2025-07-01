@@ -11,11 +11,11 @@
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <vector>
-#include "assign_indices.cc"
+#include "assign_indices.hpp"
 #include "ffs_logger.hpp"
-#include "non_primitive_basis.cc"
-#include "reflection_filter.cc"
-#include "refine_candidate.cc"
+#include "non_primitive_basis.hpp"
+#include "reflection_filter.hpp"
+#include "refine_candidate.hpp"
 
 std::mutex score_and_crystal_mtx;
 

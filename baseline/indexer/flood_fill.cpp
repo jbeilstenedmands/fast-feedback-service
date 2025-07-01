@@ -10,6 +10,7 @@
 #include <cmath>
 #include <numeric>
 #include <unordered_map>
+#include "flood_fill.hpp"
 
 #include "ffs_logger.hpp"
 

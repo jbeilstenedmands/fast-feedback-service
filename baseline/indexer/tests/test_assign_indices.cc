@@ -3,7 +3,7 @@
 #include <Eigen/Dense>
 #include <vector>
 
-#include "assign_indices.cc"
+#include "assign_indices.hpp"
 
 using Eigen::Vector3d;
 

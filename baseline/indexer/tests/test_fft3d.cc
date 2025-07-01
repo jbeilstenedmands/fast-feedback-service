@@ -5,7 +5,7 @@
 #include <numeric>
 
 #include "common.hpp"
-#include "fft3d.cc"
+#include "fft3d.hpp"
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 

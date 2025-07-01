@@ -11,6 +11,7 @@
 #include <tuple>
 
 #include "ffs_logger.hpp"
+#include "fft3d.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
@@ -19,9 +20,6 @@ using Eigen::Vector3i;
 #define _USE_MATH_DEFINES
 #include <cmath>
 
-template <typename T>
-using mdspan_type =
-  std::experimental::mdspan<T, std::experimental::dextents<size_t, 2>>;
 
 using namespace pocketfft;
 

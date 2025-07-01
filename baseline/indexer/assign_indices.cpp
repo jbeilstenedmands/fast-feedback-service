@@ -1,29 +1,18 @@
-#ifndef ASSIGN_INDICES_H
-#define ASSIGN_INDICES_H
 #include <Eigen/Dense>
 #include <cmath>
 #include <experimental/mdspan>
+#include "assign_indices.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 using Eigen::Vector3i;
 
-template <typename T>
-using mdspan_type =
-  std::experimental::mdspan<T, std::experimental::dextents<size_t, 2>>;
-
 constexpr double pi_4 = M_PI / 4;
 
-struct assign_indices_results {
-    std::vector<int> miller_indices_data;
-    mdspan_type<int> miller_indices;
-    int number_indexed;
-
-    assign_indices_results(int extent)
+assign_indices_results::assign_indices_results(int extent)
         : miller_indices_data(extent * 3),
           miller_indices(miller_indices_data.data(), extent, 3),
           number_indexed(0) {}
-};
 
 /**
  * @brief Assigns miller indices to reciprocal lattice points.
@@ -165,5 +154,3 @@ assign_indices_results assign_indices_global(Matrix3d const &A,
     }
     return results;
 }
-
-#endif

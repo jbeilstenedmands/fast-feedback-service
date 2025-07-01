@@ -5,6 +5,7 @@
 #include <dx2/utils.hpp>
 #include <optional>
 #include <vector>
+#include "combinations.hpp"
 
 #include "gemmi/symmetry.hpp"
 #include "gemmi/unitcell.hpp"
@@ -19,9 +20,7 @@ constexpr double min_angle = 20.0;
 
 // A class to determine candadite orientation matrices by combining potential lattice vectors.
 
-class CandidateOrientationMatrices {
-  public:
-    CandidateOrientationMatrices(const std::vector<Vector3d>& basis_vectors,
+CandidateOrientationMatrices::CandidateOrientationMatrices(const std::vector<Vector3d>& basis_vectors,
                                  int max_combinations = -1)
         : max_combinations(max_combinations), index(0) {
         n = basis_vectors.size();
@@ -45,14 +44,14 @@ class CandidateOrientationMatrices {
         // Truncate to the minimum of the number of possible combinations or the requested limit.
         int extent = std::min(max_combinations, static_cast<int>(combinations.size()));
         truncated_combinations = {combinations.begin(), combinations.begin() + extent};
-    }
+}
 
-    bool has_next() {
+bool CandidateOrientationMatrices::has_next() {
         return index < truncated_combinations.size();
-    }
+}
 
-    // Generate the next valid combination that meets a set of criteria.
-    std::optional<Crystal> next() {
+// Generate the next valid combination that meets a set of criteria.
+std::optional<Crystal> CandidateOrientationMatrices::next() {
         while (index < truncated_combinations.size()) {
             Vector3i comb = truncated_combinations[index];
             Vector3d v1 = truncated_basis_vectors[comb[0]];
@@ -90,13 +89,4 @@ class CandidateOrientationMatrices {
             }
         }
         return {};
-    }
-
-  private:
-    std::vector<Vector3d> truncated_basis_vectors{};
-    std::vector<Vector3i> combinations{};
-    std::vector<Vector3i> truncated_combinations{};
-    int n;
-    int max_combinations;
-    size_t index;
-};
+}

@@ -24,15 +24,15 @@
 #include <thread>
 #include <vector>
 
-#include "combinations.cc"
+#include "combinations.hpp"
 #include "ffs_logger.hpp"
-#include "fft3d.cc"
-#include "flood_fill.cc"
+#include "fft3d.hpp"
+#include "flood_fill.hpp"
 #include "gemmi/symmetry.hpp"
-#include "peaks_to_rlvs.cc"
-#include "score_crystals.cc"
-#include "xyz_to_rlp.cc"
-#include "assign_indices.cc"
+#include "peaks_to_rlvs.hpp"
+#include "score_crystals.hpp"
+#include "xyz_to_rlp.hpp"
+#include "assign_indices.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;

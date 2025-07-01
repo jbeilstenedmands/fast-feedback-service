@@ -6,6 +6,7 @@
 #include <dx2/goniometer.hpp>
 #include <dx2/scan.hpp>
 #include <experimental/mdspan>
+#include "xyz_to_rlp.hpp"
 #include <tuple>
 
 using Eigen::Matrix3d;
@@ -13,26 +14,14 @@ using Eigen::Vector3d;
 
 constexpr double DEG2RAD = M_PI / 180.0;
 
-template <typename T>
-using mdspan_type =
-  std::experimental::mdspan<T, std::experimental::dextents<size_t, 2>>;
+xyz_to_rlp_results::xyz_to_rlp_results(int extent)
+    : rlp_data(extent * 3),
+      s1_data(extent * 3),
+      xyzobs_mm_data(extent * 3),
+      rlp(rlp_data.data(), extent, 3),
+      s1(s1_data.data(), extent, 3),
+      xyzobs_mm(xyzobs_mm_data.data(), extent, 3) {}
 
-struct xyz_to_rlp_results {
-    std::vector<double> rlp_data;
-    std::vector<double> s1_data;
-    std::vector<double> xyzobs_mm_data;
-    mdspan_type<double> rlp;
-    mdspan_type<double> s1;
-    mdspan_type<double> xyzobs_mm;
-
-    xyz_to_rlp_results(int extent)
-        : rlp_data(extent * 3),
-          s1_data(extent * 3),
-          xyzobs_mm_data(extent * 3),
-          rlp(rlp_data.data(), extent, 3),
-          s1(s1_data.data(), extent, 3),
-          xyzobs_mm(xyzobs_mm_data.data(), extent, 3) {}
-};
 
 /**
  * @brief Transform detector pixel coordinates into reciprocal space coordinates.

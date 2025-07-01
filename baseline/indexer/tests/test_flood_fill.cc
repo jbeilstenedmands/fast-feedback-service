@@ -5,7 +5,7 @@
 #include <numeric>
 
 #include "common.hpp"
-#include "flood_fill.cc"
+#include "flood_fill.hpp"
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 

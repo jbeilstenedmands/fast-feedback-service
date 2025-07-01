@@ -5,7 +5,7 @@
 #include <numeric>
 
 #include "common.hpp"
-#include "peaks_to_rlvs.cc"
+#include "peaks_to_rlvs.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;

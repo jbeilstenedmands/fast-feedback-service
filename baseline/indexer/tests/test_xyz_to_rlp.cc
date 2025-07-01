@@ -9,7 +9,7 @@
 #include <dx2/scan.hpp>
 #include <nlohmann/json.hpp>
 
-#include "xyz_to_rlp.cc"
+#include "xyz_to_rlp.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
