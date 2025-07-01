@@ -1,10 +1,8 @@
-#ifndef REFINE_BPARAM
-#define REFINE_BPARAM
-
 #include <gemmi/math.hpp> // for symmetric 3x3 matrix SMat33
 #include <dx2/crystal.hpp>
 #include <Eigen/Dense>
 #include <math.h>
+#include "cell_parameterisation.hpp"
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 
@@ -21,67 +19,53 @@ gemmi::UnitCell uc_params_from_metrical_matrix(gemmi::SMat33<double> G){
   return gemmi::UnitCell(p0,p1,p2,p3,p4,p5);
 }
 
-// Define the BG converter
-struct BG {
-  // convert orientation matrix B (called A internally here) to metrical
-  // matrix g & reverse
-  /*The general orientation matrix A is re-expressed in terms of the
-    upper-triangular fractionalization matrix F by means of the following
-    transformation:
-                           F = (D * C * B * A).transpose()
-    where D,C,B are three rotation matrices.
-  */
-  Matrix3d orientation;
-  double phi,psi,theta; //in radians
-  Matrix3d B,C,D,F;
-  gemmi::SMat33<double> G;
-  void forward(Matrix3d const& ori){
-    orientation = ori;
-    Matrix3d A(ori); // i.e. B matrix (unhelpfully called A here)
-    phi = std::atan2(A(0,2),-A(2,2));
-    B = Matrix3d({
-      {std::cos(phi),0.,std::sin(phi)},
-      {0.,1.,0.},
-      {-std::sin(phi),0.,std::cos(phi)}
-    });
-    Matrix3d BA(B * A);
-    psi = std::atan2(-BA(1,2),BA(2,2));
-    C = Matrix3d({
-      {1.,0.,0.},
-      {0., std::cos(psi),std::sin(psi)},
-      {0.,-std::sin(psi),std::cos(psi)}
-    });
-    Matrix3d CBA (C * BA);
 
-    theta = std::atan2(-CBA(0,1),CBA(1,1));
-    D = Matrix3d({
-      {std::cos(theta),std::sin(theta),0.},
-      {-std::sin(theta),std::cos(theta),0.},
-      {0.,0.,1.}
-    });
-    F = (D * CBA).transpose();
-    Matrix3d G9 (A.transpose()*A); //3x3 form of metrical matrix
-    G = {G9(0,0),G9(1,1),G9(2,2),G9(0,1),G9(0,2),G9(1,2)};
-  }
-  void validate_and_setG(gemmi::SMat33<double> const& g){
-    // skip validation
-    G = {g.u11, g.u22, g.u33, g.u12, g.u13, g.u23};
-  }
-  Matrix3d back() const {
-    gemmi::UnitCell cell = uc_params_from_metrical_matrix(G);
-    cell = cell.reciprocal();
-    gemmi::Mat33 F = cell.frac.mat;
-    Matrix3d Fback;
-    Fback << F.a[0][0], 0.0, 0.0,
-      F.a[0][1], F.a[1][1], 0.0,
-      F.a[0][2], F.a[1][2], F.a[2][2];
-    Matrix3d prefact = B.inverse() * C.inverse() * D.inverse();
-    return (prefact * Fback);
-  }
-  Matrix3d back_as_orientation() const {
-    return back();
-  }
-};
+void BG::forward(Matrix3d const& ori){
+  orientation = ori;
+  Matrix3d A(ori); // i.e. B matrix (unhelpfully called A here)
+  phi = std::atan2(A(0,2),-A(2,2));
+  B = Matrix3d({
+    {std::cos(phi),0.,std::sin(phi)},
+    {0.,1.,0.},
+    {-std::sin(phi),0.,std::cos(phi)}
+  });
+  Matrix3d BA(B * A);
+  psi = std::atan2(-BA(1,2),BA(2,2));
+  C = Matrix3d({
+    {1.,0.,0.},
+    {0., std::cos(psi),std::sin(psi)},
+    {0.,-std::sin(psi),std::cos(psi)}
+  });
+  Matrix3d CBA (C * BA);
+
+  theta = std::atan2(-CBA(0,1),CBA(1,1));
+  D = Matrix3d({
+    {std::cos(theta),std::sin(theta),0.},
+    {-std::sin(theta),std::cos(theta),0.},
+    {0.,0.,1.}
+  });
+  F = (D * CBA).transpose();
+  Matrix3d G9 (A.transpose()*A); //3x3 form of metrical matrix
+  G = {G9(0,0),G9(1,1),G9(2,2),G9(0,1),G9(0,2),G9(1,2)};
+}
+void BG::validate_and_setG(gemmi::SMat33<double> const& g){
+  // skip validation
+  G = {g.u11, g.u22, g.u33, g.u12, g.u13, g.u23};
+}
+Matrix3d BG::back() const {
+  gemmi::UnitCell cell = uc_params_from_metrical_matrix(G);
+  cell = cell.reciprocal();
+  gemmi::Mat33 F = cell.frac.mat;
+  Matrix3d Fback;
+  Fback << F.a[0][0], 0.0, 0.0,
+    F.a[0][1], F.a[1][1], 0.0,
+    F.a[0][2], F.a[1][2], F.a[2][2];
+  Matrix3d prefact = B.inverse() * C.inverse() * D.inverse();
+  return (prefact * Fback);
+}
+Matrix3d BG::back_as_orientation() const {
+  return back();
+}
 
 
 std::vector<Matrix3d> calc_dB_dg(BG Bconverter){
@@ -216,21 +200,6 @@ std::vector<Matrix3d> dB_dp(BG Bconverter){
     return calc_dB_dg(Bconverter);
 }
 
-// A class to manage the translation from B to G and back,
-// plus any symmetry constraints (we are sticking to P1 here though.)
-class SymmetrizeReduceEnlarge {
-public:
-  SymmetrizeReduceEnlarge();
-  void set_orientation(Matrix3d B);
-  std::vector<double> forward_independent_parameters();
-  Matrix3d backward_orientation(std::vector<double> independent);
-  std::vector<Matrix3d> forward_gradients();
-
-private:
-  Matrix3d orientation_{};
-  BG Bconverter{};
-};
-
 SymmetrizeReduceEnlarge::SymmetrizeReduceEnlarge(){}
 
 void SymmetrizeReduceEnlarge::set_orientation(Matrix3d B) {
@@ -254,23 +223,6 @@ Matrix3d SymmetrizeReduceEnlarge::backward_orientation(
 std::vector<Matrix3d> SymmetrizeReduceEnlarge::forward_gradients() {
   return dB_dp(Bconverter);
 }
-
-
-class CellParameterisation {
-public:
-  CellParameterisation(const Crystal& crystal);
-  std::vector<double> get_params() const;
-  void set_params(std::vector<double>);
-  Matrix3d get_state() const;
-  std::vector<Matrix3d> get_dS_dp() const;
-
-private:
-  std::vector<double> params_ = {0.0,0.0,0.0,0.0,0.0,0.0};
-  void compose();
-  Matrix3d B_{};
-  std::vector<Matrix3d> dS_dp{};
-  SymmetrizeReduceEnlarge SRE;
-};
 
 void CellParameterisation::compose() {
   std::vector<double> vals(params_.size());
@@ -314,5 +266,3 @@ void CellParameterisation::set_params(std::vector<double> p) {
 std::vector<Matrix3d> CellParameterisation::get_dS_dp() const {
   return dS_dp;
 }
-
-#endif  // REFINE_BPARAM

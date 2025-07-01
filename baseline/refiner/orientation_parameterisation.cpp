@@ -4,13 +4,12 @@
 #include <dx2/goniometer.hpp>
 #include "refinement_utils.cc"
 #include <Eigen/Dense>
+#include "orientation_parameterisation.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 
-class CrystalOrientationCompose {
-  public:
-    CrystalOrientationCompose(const Matrix3d &U0,
+CrystalOrientationCompose::CrystalOrientationCompose(const Matrix3d &U0,
                               double phi1,
                               const Vector3d &phi1_axis,
                               double phi2,
@@ -41,49 +40,24 @@ class CrystalOrientationCompose {
       dU_dphi1_ = (Phi3 * Phi2 * dPhi1_dphi1 * U0) / 1000.0;
       dU_dphi2_ = (Phi3 * dPhi2_dphi2 * Phi1 * U0) / 1000.0;
       dU_dphi3_ = (dPhi3_dphi3 * Phi21 * U0) / 1000.0;
-    }
+                              }
 
-    Matrix3d U() const {
-      return U_;
-    }
+Matrix3d CrystalOrientationCompose::U() const {
+  return U_;
+}
 
-    Matrix3d dU_dphi1() const {
-      return dU_dphi1_;
-    }
+Matrix3d CrystalOrientationCompose::dU_dphi1() const {
+  return dU_dphi1_;
+}
 
-    Matrix3d dU_dphi2() const {
-      return dU_dphi2_;
-    }
+Matrix3d CrystalOrientationCompose::dU_dphi2() const {
+  return dU_dphi2_;
+}
 
-    Matrix3d dU_dphi3() const {
-      return dU_dphi3_;
-    }
+Matrix3d CrystalOrientationCompose::dU_dphi3() const {
+  return dU_dphi3_;
+}
 
-  private:
-    Matrix3d U_;
-    Matrix3d dU_dphi1_;
-    Matrix3d dU_dphi2_;
-    Matrix3d dU_dphi3_;
-  };
-
-class OrientationParameterisation {
-public:
-  OrientationParameterisation(const Crystal& crystal);
-  std::vector<double> get_params() const;
-  void set_params(std::vector<double> p);
-  Matrix3d get_state() const;
-  std::vector<Matrix3d> get_dS_dp() const;
-
-private:
-  std::vector<double> params = {0.0, 0.0, 0.0};
-  std::vector<Vector3d> axes{3, Vector3d(1.0, 0.0, 0.0)};
-  void compose();
-  Matrix3d istate{};
-  Matrix3d U_{};
-  std::vector<Matrix3d> dS_dp{
-    3,
-    Matrix3d{{1.0, 0, 0}, {0, 1.0, 0}, {0, 0, 1.0}}};
-};
 
 void OrientationParameterisation::compose() {
   CrystalOrientationCompose coc(

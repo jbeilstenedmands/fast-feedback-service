@@ -8,14 +8,14 @@
 #include <iostream>
 #include <random>
 
-#include "scan_static_predictor.cc"
+#include "scan_static_predictor.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 using Eigen::Vector3i;
 
 constexpr double iqr_multiplier = 3.0;
-// imported from scanstaticpredictor constexpr size_t predicted_value = (1 << 0); //predicted flag
+constexpr size_t predicted_value = (1 << 0); //predicted flag
 constexpr size_t used_in_refinement_value = (1 << 3);  //used in refinement flag
 constexpr size_t centroid_outlier_value = (1 << 17);   //centroid outlier flag
 constexpr size_t overloaded_value = (1 << 10);         //overloaded flag

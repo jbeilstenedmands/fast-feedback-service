@@ -7,6 +7,7 @@
 #include <dx2/detector.hpp>
 #include <dx2/goniometer.hpp>
 #include <dx2/reflection.hpp>
+#include "scan_static_predictor.hpp"
 
 constexpr double two_pi = 2 * M_PI;
 

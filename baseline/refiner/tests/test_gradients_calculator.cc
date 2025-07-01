@@ -3,7 +3,7 @@
 #include <Eigen/Dense>
 #include <vector>
 
-#include "gradients_calculator.cc"
+#include "gradients_calculator.hpp"
 
 using Eigen::Vector3d;
 

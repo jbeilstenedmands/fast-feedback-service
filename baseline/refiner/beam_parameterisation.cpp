@@ -1,43 +1,11 @@
-#ifndef DIALS_RESEARCH_BEAMPARAM
-#define DIALS_RESEARCH_BEAMPARAM
 #include <dx2/beam.hpp>
 #include <dx2/goniometer.hpp>
 #include "refinement_utils.cc"
 #include <Eigen/Dense>
+#include "beam_parameterisation.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
-using Eigen::Vector3i;
-
-class BeamParameterisation {
-public:
-  BeamParameterisation(
-    const MonochromaticBeam& beam, const Goniometer& goniometer,
-    bool fix_in_spindle_plane, bool fix_out_spindle_plane, bool fix_wavelength);
-  std::vector<double> get_params() const;
-  void set_params(std::vector<double> p);
-  Vector3d get_state() const;
-  std::vector<Vector3d> get_dS_dp() const;
-  bool in_spindle_plane_fixed() const;
-  bool out_spindle_plane_fixed() const;
-  bool wavelength_fixed() const;
-
-private:
-  std::vector<double> params_ = {0.0,0.0,0.0}; //mu1, mu2, nu
-  void compose();
-  Vector3d istate_s0{};
-  Vector3d istate_pol_norm{};
-  Vector3d s0{};
-  Vector3d pn{};
-  Vector3d s0_plane_dir1{};
-  Vector3d s0_plane_dir2{};
-  std::vector<Vector3d> dS_dp{
-    3,
-    Vector3d(0.0, 0, 0)};
-  bool _fix_in_spindle_plane{true};
-  bool _fix_out_spindle_plane{false};
-  bool _fix_wavelength{true};
-};
 
 void BeamParameterisation::compose(){
     double mu1rad = params_[0] / 1000.0;
@@ -73,9 +41,9 @@ void BeamParameterisation::compose(){
 BeamParameterisation::BeamParameterisation(
     const MonochromaticBeam& beam,
     const Goniometer& goniometer,
-    bool fix_in_spindle_plane=true,
-    bool fix_out_spindle_plane=false,
-    bool fix_wavelength=true):
+    bool fix_in_spindle_plane,
+    bool fix_out_spindle_plane,
+    bool fix_wavelength):
         _fix_in_spindle_plane{fix_in_spindle_plane},
         _fix_out_spindle_plane{fix_out_spindle_plane},
         _fix_wavelength{fix_wavelength} {
@@ -113,5 +81,3 @@ bool BeamParameterisation::out_spindle_plane_fixed() const{
 bool BeamParameterisation::wavelength_fixed() const{
   return _fix_wavelength;
 }
-
-#endif  // DIALS_RESEARCH_BEAMPARAM

@@ -1,56 +1,11 @@
-#ifndef DIALS_RESEARCH_DPARAM
-#define DIALS_RESEARCH_DPARAM
 #include <dx2/detector.hpp>
 #include <Eigen/Dense>
 #include "refinement_utils.cc"
+#include "detector_parameterisation.hpp"
 #include <cmath>
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
-using Eigen::Vector3i;
-
-class DetectorParameterisation {
-public:
-  DetectorParameterisation(
-    const Panel &panel,
-    bool fix_dist,
-    bool fix_shift1,
-    bool fix_shift2,
-    bool fix_tau1,
-    bool fix_tau2,
-    bool fix_tau3);
-  std::vector<double> get_params() const;
-  void set_params(std::vector<double> p);
-  Matrix3d get_state() const;
-  std::vector<Matrix3d> get_dS_dp() const;
-  bool dist_fixed() const;
-  bool shift1_fixed() const;
-  bool shift2_fixed() const;
-  bool tau1_fixed() const;
-  bool tau2_fixed() const;
-  bool tau3_fixed() const;
-
-private:
-  std::vector<double> params_ = {0.0,0.0,0.0,0.0,0.0,0.0}; //
-  void compose();
-  std::vector<Matrix3d> dS_dp{
-    6,
-    Matrix3d {{0, 0, 0}, {0, 0, 0}, {0,0,0}}};
-  Vector3d initial_offset{{0.0,0.0,0.0}};
-  Vector3d initial_d1{{0.0,0.0,0.0}};
-  Vector3d initial_d2{{0.0,0.0,0.0}};
-  Vector3d initial_dn{{0.0,0.0,0.0}};
-  Vector3d initial_origin{{0.0,0.0,0.0}};
-  Vector3d current_origin{{0.0,0.0,0.0}};
-  Vector3d current_d1{{0.0,0.0,0.0}};
-  Vector3d current_d2{{0.0,0.0,0.0}};
-  bool _fix_dist{true};
-  bool _fix_shift1{false};
-  bool _fix_shift2{true};
-  bool _fix_tau1{true};
-  bool _fix_tau2{true};
-  bool _fix_tau3{true};
-};
 
 void DetectorParameterisation::compose(){
     double t1r = params_[3] / 1000.0;
@@ -166,12 +121,12 @@ void DetectorParameterisation::compose(){
 
 DetectorParameterisation::DetectorParameterisation(
     const Panel& p,
-    bool fix_dist=false,
-    bool fix_shift1=false,
-    bool fix_shift2=false,
-    bool fix_tau1=false,
-    bool fix_tau2=false,
-    bool fix_tau3=false): 
+    bool fix_dist,
+    bool fix_shift1,
+    bool fix_shift2,
+    bool fix_tau1,
+    bool fix_tau2,
+    bool fix_tau3): 
         _fix_dist{fix_dist}, _fix_shift1{fix_shift1}, _fix_shift2{fix_shift2},
         _fix_tau1{fix_tau1}, _fix_tau2{fix_tau2}, _fix_tau3{fix_tau3}{
     //const dxtbx::model::Panel& p = Detector[0];
@@ -234,5 +189,3 @@ bool DetectorParameterisation::tau2_fixed() const {
 bool DetectorParameterisation::tau3_fixed() const {
     return _fix_tau3;
 }
-
-#endif  // DIALS_RESEARCH_DPARAM

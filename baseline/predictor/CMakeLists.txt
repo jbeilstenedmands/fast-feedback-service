@@ -24,21 +24,15 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(mdspan)
 FetchContent_MakeAvailable(Eigen3)
 
-# GTest could have been made available under a different name
-if(NOT TARGET GTest::gtest_main)
-    FetchContent_MakeAvailable(GTest)
-endif()
-add_subdirectory(tests)
 
-file(GLOB REFINER_SOURCES *.cpp)
+file(GLOB PREDICTOR_SOURCES *.cpp)
 
-add_library(refiner STATIC ${REFINER_SOURCES})
+add_library(predictor STATIC ${PREDICTOR_SOURCES})
 
-target_include_directories(refiner PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(predictor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(refiner
+target_link_libraries(predictor
     PUBLIC
-    predictor
     dx2
     Eigen3::Eigen
     fmt

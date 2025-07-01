@@ -7,10 +7,11 @@
 #include <dx2/goniometer.hpp>
 #include <dx2/reflection.hpp>
 
-#include "target.cc"
-#include "detector_parameterisation.cc"
-#include "cell_parameterisation.cc"
-#include "orientation_parameterisation.cc"
+#include "target.hpp"
+#include "detector_parameterisation.hpp"
+#include "cell_parameterisation.hpp"
+#include "orientation_parameterisation.hpp"
+#include "beam_parameterisation.hpp"
 
 #include <unsupported/Eigen/NonLinearOptimization>
 #include <unsupported/Eigen/NumericalDiff>

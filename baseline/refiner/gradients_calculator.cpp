@@ -1,53 +1,21 @@
-#ifndef GRADIENTS_CALCULATOR_H
-#define GRADIENTS_CALCULATOR_H
-
-//#include <dx2/beam.hpp>
-#include <dx2/crystal.hpp>
-//#include <dx2/detector.hpp>
 #include <dx2/goniometer.hpp>
-#include "detector_parameterisation.cc"
-#include "beam_parameterisation.cc"
-#include "orientation_parameterisation.cc"
-#include "cell_parameterisation.cc"
+#include "detector_parameterisation.hpp"
+#include "beam_parameterisation.hpp"
+#include "orientation_parameterisation.hpp"
+#include "cell_parameterisation.hpp"
 #include <dx2/reflection.hpp>
-#include "scan_static_predictor.cc"
+#include "scan_static_predictor.hpp"
+#include "gradients_calculator.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 using Eigen::Vector3i;
 
-class GradientsCalculator {
-public:
-    GradientsCalculator(
-        OrientationParameterisation &uparam,
-        CellParameterisation &bparam,
-        //Crystal &crystal,
-        const Goniometer &goniometer,
-        //MonochromaticBeam& beam,
-        //BParameterisation &bparam,
-        BeamParameterisation& beamparam,
-        DetectorParameterisation& Dparam) ;
-    std::vector<std::vector<double>> get_gradients(const ReflectionTable &obs) const;
-
-private:
-  //Experiment<MonochromaticBeam> experiment;
-  OrientationParameterisation uparam;
-  CellParameterisation bparam;
-  //BParameterisation bparam;
-  //BeamParameterisation beamparam;
-  //Crystal crystal;
-  Goniometer goniometer;
-  //MonochromaticBeam beam;
-  BeamParameterisation beamparam;
-  DetectorParameterisation& Dparam;
-};
 
 GradientsCalculator::GradientsCalculator(
     OrientationParameterisation& uparam,
     CellParameterisation& bparam,
-    //Crystal &crystal,
     const Goniometer &goniometer,
-    //MonochromaticBeam& beam,
     BeamParameterisation& beamparam,
     DetectorParameterisation& Dparam) :
 uparam(uparam), bparam(bparam), goniometer(goniometer), beamparam(beamparam), Dparam(Dparam) {};
@@ -196,5 +164,3 @@ std::vector<std::vector<double>> GradientsCalculator::get_gradients(const Reflec
 
     return gradients;
 }
-
-#endif //GRADIENTS_CALCULATOR_H
