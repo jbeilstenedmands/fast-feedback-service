@@ -17,7 +17,7 @@
 #include "reflection_filter.hpp"
 #include "refine_candidate.hpp"
 
-inline std::mutex score_and_crystal_mtx;
+extern std::mutex score_and_crystal_mtx;
 
 // A struct to score a candidate crystal model.
 struct score_and_crystal {
@@ -45,7 +45,7 @@ struct score_and_crystal {
         return data;
     }
 };
-inline std::map<int, score_and_crystal> results_map;
+extern std::map<int, score_and_crystal> results_map;
 /**
  * @brief Evaluate a crystal model by evaluating how well it describes the reflection data.
  * @param crystal The crystal model.

@@ -6,7 +6,6 @@
 #include <optional>
 #include <vector>
 #include "combinations.hpp"
-
 #include "gemmi/symmetry.hpp"
 #include "gemmi/unitcell.hpp"
 

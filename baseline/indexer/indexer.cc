@@ -272,10 +272,35 @@ int main(int argc, char** argv) {
     // Limit the number of active threads to the max concurrency, without needing to manage a threadpool.
     int batch_size = std::min(max_refine, nthreads);
     int n = 0;  // Candidate number
+    std::mutex candidates_mutex;
     for (int i = 0; i < max_refine; i += nthreads) {
         threads.clear();
         int j = 0;
-        while (candidates.has_next() && n < max_refine && j < batch_size) {
+        
+        while (true && n < max_refine && j < batch_size) {
+          std::optional<Crystal> next_crystal;
+          {
+              std::lock_guard<std::mutex> lock(candidates_mutex);
+              if (!candidates.has_next()) break;
+              next_crystal = candidates.next();
+          }
+          if (next_crystal.has_value()) {
+            Crystal crystal = next_crystal.value();
+                n++;
+                j++;
+                threads.emplace_back(std::thread(evaluate_crystal,
+                                                 crystal,
+                                                 std::ref(filtered),
+                                                 gonio,
+                                                 beam,
+                                                 panel,
+                                                 scan_width,
+                                                 n));
+          } else {
+              break;
+          }
+        }
+        /*while (candidates.has_next() && n < max_refine && j < batch_size) {
             std::optional<Crystal> next_crystal = candidates.next();
             if (next_crystal.has_value()) {
                 Crystal crystal = next_crystal.value();
@@ -292,12 +317,11 @@ int main(int argc, char** argv) {
             } else {
                 break;
             }
-        }
+        }*/
         for (auto& t : threads) {
             t.join();
         }
     }
-
     // Determine a relative score for all candidates and print a summary to the log.
     score_solutions(results_map);
     std::vector<std::pair<int, score_and_crystal>> results_vector(results_map.begin(),

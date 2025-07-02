@@ -14,8 +14,8 @@
 #include "reflection_filter.hpp"
 #include "refine_candidate.hpp"
 #include "score_crystals.hpp"
-
-
+std::mutex score_and_crystal_mtx;
+std::map<int, score_and_crystal> results_map;
 /**
  * @brief Evaluate a crystal model by evaluating how well it describes the reflection data.
  * @param crystal The crystal model.
@@ -76,9 +76,8 @@ void evaluate_crystal(Crystal crystal,
     sac.rmsdxy = xyrmsd;
     sac.fraction_indexed = static_cast<double>(count) / rlp.extent(0);
     logger.info("Scored candidate crystal {}", n);
-    score_and_crystal_mtx.lock();
+    std::lock_guard<std::mutex> lock(score_and_crystal_mtx);
     results_map[n] = sac;
-    score_and_crystal_mtx.unlock();
 }
 
 /**
