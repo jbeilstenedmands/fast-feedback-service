@@ -40,7 +40,8 @@ std::vector<int> absence_test(const std::vector<Vector3i>& hkl,
  * @param threshold A threshold for positive identification of an absence.
  * @returns A transformation matrix to reindex and remove the absence.
  */
-Matrix3d detect(const std::vector<Vector3i>& hkl, double threshold = 0.9) {
+Matrix3d detect(const std::vector<Vector3i>& hkl, double threshold) {
+    Matrix3d null{};
     for (const reindex_transforms& transform : transforms) {
         std::vector<int> cumulative =
           absence_test(hkl, transform.modularity, transform.vector);
@@ -74,8 +75,9 @@ int correct(std::vector<int>& hkl,
             Crystal& crystal,
             mdspan_type<double> const& rlp,
             mdspan_type<double> const& xyzobs_mm,
-            double threshold = 0.9) {
+            double threshold) {
     Vector3i null_miller = {0, 0, 0};
+    Matrix3d null{};
     int count;  // num indexed
     while (true) {
         mdspan_type<int> miller_indices(hkl.data(), hkl.size() / 3, 3);

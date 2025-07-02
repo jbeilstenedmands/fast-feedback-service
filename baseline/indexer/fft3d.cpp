@@ -37,8 +37,8 @@ void map_centroids_to_reciprocal_space_grid(
   std::vector<std::complex<double>> &data_in,
   std::vector<bool> &selection,
   double d_min,
-  double b_iso = 0,
-  uint32_t n_points = 256) {
+  double b_iso,
+  uint32_t n_points) {
     assert(data_in.size() == n_points * n_points * n_points);
     // Determine the resolution span of the grid so we know how to map
     // each coordinate to the grid.
@@ -100,9 +100,9 @@ void map_centroids_to_reciprocal_space_grid(
 std::vector<bool> fft3d(mdspan_type<double> const &reciprocal_space_vectors,
                         std::vector<double> &real_out,
                         double d_min,
-                        double b_iso = 0,
-                        uint32_t n_points = 256,
-                        size_t nthreads = 1) {
+                        double b_iso,
+                        uint32_t n_points,
+                        size_t nthreads) {
     auto start = std::chrono::system_clock::now();
     assert(real_out.size() == n_points * n_points * n_points);
 

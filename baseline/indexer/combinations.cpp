@@ -21,7 +21,7 @@ constexpr double min_angle = 20.0;
 // A class to determine candadite orientation matrices by combining potential lattice vectors.
 
 CandidateOrientationMatrices::CandidateOrientationMatrices(const std::vector<Vector3d>& basis_vectors,
-                                 int max_combinations = -1)
+                                 int max_combinations)
         : max_combinations(max_combinations), index(0) {
         n = basis_vectors.size();
         n = std::min(n, 100);

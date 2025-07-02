@@ -1,6 +1,6 @@
 #include <dx2/detector.hpp>
 #include <Eigen/Dense>
-#include "refinement_utils.cc"
+#include "refinement_utils.hpp"
 #include "detector_parameterisation.hpp"
 #include <cmath>
 

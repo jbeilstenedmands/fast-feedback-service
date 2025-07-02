@@ -51,7 +51,7 @@ struct RefineFunctor
   int values() const { return 3 * target.nref(); } // values is the number of residuals, (x,y,z for each refl here).
 };
 
-double refine_indexing_candidate(
+inline double refine_indexing_candidate(
   Crystal& crystal, const Goniometer& gonio, MonochromaticBeam& beam, Panel& panel, ReflectionTable& sel_obs
 ){
     Target target(crystal, gonio, beam, panel, sel_obs);

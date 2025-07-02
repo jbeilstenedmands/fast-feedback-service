@@ -31,8 +31,8 @@ int modulo(int i, int n) {
  */
 std::tuple<std::vector<int>, std::vector<Vector3d>> flood_fill(
   std::vector<double> const& grid,
-  double rmsd_cutoff = 15.0,
-  int n_points = 256) {
+  double rmsd_cutoff,
+  int n_points) {
     auto start = std::chrono::system_clock::now();
     assert(grid.size() == n_points * n_points * n_points);
     //  First calculate the rmsd and use this to create a binary grid
@@ -159,7 +159,7 @@ std::tuple<std::vector<int>, std::vector<Vector3d>> flood_fill(
 std::tuple<std::vector<int>, std::vector<Vector3d>> flood_fill_filter(
   std::vector<int> grid_points_per_void,
   std::vector<Vector3d> centres_of_mass_frac,
-  double peak_volume_cutoff = 0.15) {
+  double peak_volume_cutoff) {
     // Filter out based on iqr range and peak_volume_cutoff
     std::vector<int> grid_points_per_void_unsorted(grid_points_per_void);
     // Acting on a copy of the input data.

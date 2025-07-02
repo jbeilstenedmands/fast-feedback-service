@@ -20,7 +20,7 @@ struct reindex_transforms {
 };
 
 // This is always the same, ideally would make a constexpr but issues with Eigen objects not being literal types
-std::vector<reindex_transforms> generate_reindex_transformations() {
+inline std::vector<reindex_transforms> generate_reindex_transformations() {
     const std::vector<int> modularities = {2, 3, 5};
     // generate combinations
     std::vector<Vector3i> points;
@@ -125,9 +125,8 @@ std::vector<reindex_transforms> generate_reindex_transformations() {
     return reindex;
 }
 
-std::vector<reindex_transforms> transforms = generate_reindex_transformations();
+inline std::vector<reindex_transforms> transforms = generate_reindex_transformations();
 
-Matrix3d null{};
 
 /**
  * @brief Perform absence tests to evaluate potential systematic absences.

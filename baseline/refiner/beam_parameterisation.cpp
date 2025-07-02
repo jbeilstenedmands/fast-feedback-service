@@ -1,6 +1,6 @@
 #include <dx2/beam.hpp>
 #include <dx2/goniometer.hpp>
-#include "refinement_utils.cc"
+#include "refinement_utils.hpp"
 #include <Eigen/Dense>
 #include "beam_parameterisation.hpp"
 

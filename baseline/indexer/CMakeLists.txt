@@ -39,8 +39,10 @@ if(NOT TARGET GTest::gtest_main)
     FetchContent_MakeAvailable(GTest)
 endif()
 add_subdirectory(tests)
+file(GLOB INDEXER_SOURCES *.cpp)
 add_executable(baseline_indexer
     indexer.cc
+    ${INDEXER_SOURCES}
 )
 target_include_directories(baseline_indexer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(baseline_indexer

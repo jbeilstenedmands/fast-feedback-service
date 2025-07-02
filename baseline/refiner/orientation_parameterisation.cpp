@@ -2,7 +2,7 @@
 #define DIALS_RESEARCH_UPARAM
 #include <dx2/crystal.hpp>
 #include <dx2/goniometer.hpp>
-#include "refinement_utils.cc"
+#include "refinement_utils.hpp"
 #include <Eigen/Dense>
 #include "orientation_parameterisation.hpp"
 

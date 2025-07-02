@@ -258,7 +258,6 @@ int main(int argc, char** argv) {
     reflections.add_column(std::string("entering"), enterings);
     const ReflectionTable filtered = reflections.select(selection);
 
-    Vector3i null{{0, 0, 0}};
     int n_images = scan.get_image_range()[1] - scan.get_image_range()[0] + 1;
     double scan_width =
       scan.get_oscillation()[0] + (scan.get_oscillation()[1] * n_images);

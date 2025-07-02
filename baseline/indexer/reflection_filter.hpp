@@ -28,7 +28,7 @@ constexpr size_t overloaded_value = (1 << 10);         //overloaded flag
  * @param seed The seed value for the mt19937 Mersenne-Twister pseudo-random generator.
  * @returns A vector of indices.
 */
-std::vector<std::size_t> random_selection(int pop_size,
+inline std::vector<std::size_t> random_selection(int pop_size,
                                           int sample_size,
                                           int seed = 43) {
     std::mt19937 mt(seed);
@@ -54,7 +54,7 @@ std::vector<std::size_t> random_selection(int pop_size,
  * @param zresid A vector of residuals in the third dimension.
  * @returns A vector of outlier indices.
  */
-std::vector<size_t> simple_tukey(std::vector<double> xresid,
+inline std::vector<size_t> simple_tukey(std::vector<double> xresid,
                                  std::vector<double> yresid,
                                  std::vector<double> zresid) {
     std::vector<size_t> sel{};
@@ -127,7 +127,7 @@ std::vector<size_t> simple_tukey(std::vector<double> xresid,
  * @param ReflectionTable The reflection table.
  * @returns A reflection table that is a subset of the input table.
  */
-ReflectionTable outlier_filter(ReflectionTable& reflections) {
+inline ReflectionTable outlier_filter(ReflectionTable& reflections) {
     // First make sure the reflections have the predicted flag.
     auto flags_ = reflections.column<std::size_t>("flags");
     auto& flags = flags_.value();
@@ -197,7 +197,7 @@ ReflectionTable outlier_filter(ReflectionTable& reflections) {
  * @param close_to_spindle_cutoff The cutoff threshold for removing reflection for being close to the rotation axis.
  * @returns A subset of the input reflection table.
  */
-ReflectionTable initial_filter(const ReflectionTable& reflections,
+inline ReflectionTable initial_filter(const ReflectionTable& reflections,
                                const mdspan_type<int>& hkl,
                                const Goniometer gonio,
                                const MonochromaticBeam beam,
@@ -257,7 +257,7 @@ ReflectionTable initial_filter(const ReflectionTable& reflections,
  * @param max_sample_size The maximum sample size to return.
  * @returns A subset of the input reflection table.
  */
-std::optional<ReflectionTable> select_sample(ReflectionTable& obs,
+inline std::optional<ReflectionTable> select_sample(ReflectionTable& obs,
                                              int nref_per_degree,
                                              double scan_width_degrees,
                                              int min_sample_size,
@@ -295,7 +295,7 @@ std::optional<ReflectionTable> select_sample(ReflectionTable& obs,
  * @param max_sample_size The maximum sample size to return.
  * @returns A filtered subset of the input reflection table.
  */
-ReflectionTable reflection_filter_preevaluation(const ReflectionTable& obs,
+inline ReflectionTable reflection_filter_preevaluation(const ReflectionTable& obs,
                                                 const mdspan_type<int>& miller_indices,
                                                 const Goniometer& gonio,
                                                 const Crystal& crystal,

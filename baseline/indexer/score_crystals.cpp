@@ -1,6 +1,3 @@
-#ifndef SCORE_CRYSTALS_H
-#define SCORE_CRYSTALS_H
-
 #include <chrono>
 #include <dx2/beam.hpp>
 #include <dx2/crystal.hpp>
@@ -14,39 +11,10 @@
 #include "assign_indices.hpp"
 #include "ffs_logger.hpp"
 #include "non_primitive_basis.hpp"
-#include "reflection_filter.cc"
-#include "refine_candidate.cc"
+#include "reflection_filter.hpp"
+#include "refine_candidate.hpp"
+#include "score_crystals.hpp"
 
-std::mutex score_and_crystal_mtx;
-
-// A struct to score a candidate crystal model.
-struct score_and_crystal {
-    double score;
-    Crystal crystal;
-    MonochromaticBeam beam;
-    Panel panel;
-    double num_indexed;
-    double rmsdxy;
-    double fraction_indexed;
-    double volume_score;
-    double indexed_score;
-    double rmsd_score;
-
-    json to_json() {
-        json data;
-        data["score"] = score;
-        data["num_indexed"] = num_indexed;
-        data["rmsdxy"] = rmsdxy;
-        data["fraction_indexed"] = fraction_indexed;
-        data["volume_score"] = volume_score;
-        data["indexed_score"] = indexed_score;
-        data["rmsd_score"] = rmsd_score;
-        data["crystal"] = crystal.to_json();
-        return data;
-    }
-};
-
-std::map<int, score_and_crystal> results_map;
 
 /**
  * @brief Evaluate a crystal model by evaluating how well it describes the reflection data.
@@ -152,5 +120,3 @@ void score_solutions(std::map<int, score_and_crystal>& results_map) {
           rmsd_scores[i] + fraction_indexed_scores[i] + volume_scores[i];
     }
 }
-
-#endif
