@@ -41,6 +41,9 @@ SHMRead::SHMRead(const std::string &path) : _base_path(path) {
     }
 
     _detector_distance = data["detector_distance"].template get<float>() / 1000;
+    if (data.contains("detector_sensor_thickness")){
+        _detector_sensor_thickness = data["detector_sensor_thickness"].template get<float>();
+    }
     _pixel_size = {data["y_pixel_size"].template get<float>(),
                    data["x_pixel_size"].template get<float>()};
     _beam_center = {data["beam_center_y"].template get<float>(),

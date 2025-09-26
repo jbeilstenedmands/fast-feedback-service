@@ -62,6 +62,7 @@ float h5read_get_pixel_size_fast(h5read_handle *obj);
 float h5read_get_oscillation_start(h5read_handle *obj);
 float h5read_get_oscillation_width(h5read_handle *obj);
 float h5read_get_detector_distance(h5read_handle *obj);
+float h5read_get_detector_sensor_thickness(h5read_handle *obj);
 float h5read_get_beam_center_x(h5read_handle *obj);
 float h5read_get_beam_center_y(h5read_handle *obj);
 
@@ -174,6 +175,8 @@ class Reader {
       const = 0;  ///< Beam center (y, x), in pixels
     virtual std::optional<float> get_detector_distance()
       const = 0;  ///< Distance to detector, in meters.
+    virtual std::optional<float> get_detector_sensor_thickness()
+      const = 0;  ///< Sensor thickness, in meters.
     virtual std::array<float, 2> get_oscillation()
       const = 0;  ///< Oscillation (start, width), in degrees
 };
@@ -288,6 +291,9 @@ class H5Read : public Reader {
     }
     virtual std::optional<float> get_detector_distance() const {
         return {h5read_get_detector_distance(_handle.get())};
+    }
+    virtual std::optional<float> get_detector_sensor_thickness() const {
+        return {h5read_get_detector_sensor_thickness(_handle.get())};
     }
     std::mutex mutex;
 

@@ -49,6 +49,7 @@ struct _h5read_handle {
 
     float pixel_size_x, pixel_size_y;
     float detector_distance;
+    float detector_sensor_thickness;
     float beam_center_x, beam_center_y;
     float oscillation_start;
     float oscillation_width;
@@ -433,6 +434,9 @@ float h5read_get_pixel_size_fast(h5read_handle *obj) {
 float h5read_get_detector_distance(h5read_handle *obj) {
     return obj->detector_distance;
 }
+float h5read_get_detector_sensor_thickness(h5read_handle *obj) {
+    return obj->detector_sensor_thickness;
+}
 float h5read_get_beam_center_x(h5read_handle *obj) {
     return obj->beam_center_x;
 }
@@ -781,6 +785,13 @@ void read_detector_metadata(h5read_handle *obj) {
         fprintf(stderr, "Warning: No detector distance found\n");
         obj->detector_distance = -1;
     }
+    if (_read_single_value_float(obj->master_file,
+                                 "/entry/instrument/detector/sensor_thickness",
+                                 &obj->detector_sensor_thickness)
+        < 0) {
+        fprintf(stderr, "Warning: No detector sensor thickness found\n");
+        obj->detector_sensor_thickness = -1;
+    }
 
     if (obj->pixel_size_x > 0) {
         printf("Read pixel size: %f\n", obj->pixel_size_x);
@@ -1057,6 +1068,7 @@ h5read_handle *h5read_generate_samples() {
     file->pixel_size_x = 0.75e-6;
     file->pixel_size_y = 0.75e-6;
     file->detector_distance = 0.5;
+    file->detector_sensor_thickness = 0.0005;
 
     // Module mask is just empty for now
     file->module_mask =

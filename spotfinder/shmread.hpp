@@ -18,6 +18,7 @@ class SHMRead : public Reader {
     std::array<float, 2> _beam_center;
     std::array<float, 2> _pixel_size;
     float _detector_distance;
+    float _detector_sensor_thickness;
     std::array<float, 2> _oscillation;
 
   public:
@@ -54,6 +55,9 @@ class SHMRead : public Reader {
     }
     virtual std::optional<float> get_detector_distance() const {
         return _detector_distance;
+    }
+    std::optional<float> get_detector_sensor_thickness() const {
+        return _detector_sensor_thickness;
     }
     virtual std::array<float, 2> get_oscillation() const {
         return _oscillation;
