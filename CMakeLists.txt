@@ -21,16 +21,19 @@ include(AlwaysColourCompilation)
 
 include_directories(include)
 
+# Find Python
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+include_directories(${Python3_INCLUDE_DIRS})
+
 # Dependency fetching
 set(FETCHCONTENT_QUIET OFF)
 include(FetchContent)
 FetchContent_Declare(
-    fmt
-    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-    GIT_TAG        11.0.2
-    FIND_PACKAGE_ARGS
+  nanobind
+  GIT_REPOSITORY https://github.com/wjakob/nanobind.git
+  GIT_TAG        v2.8.0
 )
-FetchContent_MakeAvailable(fmt)
+FetchContent_MakeAvailable(nanobind)
 FetchContent_Declare(
     nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -44,13 +47,9 @@ FetchContent_Declare(
     GIT_TAG f362c4647e7b4bbfef8320040409560b5f90e9e0
 )
 FetchContent_MakeAvailable(argparse)
-FetchContent_Declare(
-    spdlog
-    GIT_REPOSITORY https://github.com/gabime/spdlog
-    GIT_TAG        v1.15.0
-    FIND_PACKAGE_ARGS
-)
-FetchContent_MakeAvailable(spdlog)
+
+find_package(fmt REQUIRED)
+find_package(spdlog REQUIRED)
 
 # Handle inclusion of dx2 dependency using git submodule
 set(dx2_SOURCE_DIR "${CMAKE_SOURCE_DIR}/dx2")
@@ -129,3 +128,5 @@ add_subdirectory(h5read)
 add_subdirectory(baseline)
 add_subdirectory(spotfinder)
 add_subdirectory(predictor)
+
+configure_file(${CMAKE_SOURCE_DIR}/scripts/ssx_index ${CMAKE_BINARY_DIR}/bin/ssx_index COPYONLY)
