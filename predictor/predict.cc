@@ -1457,8 +1457,9 @@ int main(int argc, char** argv) {
                     xyz_px.push_back(0);
                     panels.push_back(panel);
                     flags.push_back(predicted_flag);
-                    if (beam_type == BeamType::Monochromatic)
+                    if (beam_type == BeamType::Monochromatic){
                         delpsi.push_back(ray->angle);
+	            }
                     else {
                         wavelength_cal.push_back(1.0 / ray->s1.norm());
                         Vector3d s0_pred = s0.normalized() / ray->s1.norm();
@@ -1467,10 +1468,7 @@ int main(int argc, char** argv) {
                     }
                 }
             }
-#pragma endregion
-
-#pragma region Rotational Prediction
-            else [[likely]] {
+            else {
                 // Rotational-experiment-specific code goes here
 
                 const Vector3d m2 = goniometer.get_rotation_axis();
