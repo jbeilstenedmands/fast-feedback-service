@@ -1,9 +1,13 @@
 project(predictor CXX)
 
+# Automatic Dependencies
+set(FETCHCONTENT_QUIET OFF)
+include(FetchContent)
 FetchContent_Declare(
     Eigen3
     GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
     GIT_TAG 3.4.0
+    EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS
 )
 
@@ -12,7 +16,6 @@ FetchContent_MakeAvailable(Eigen3)
 find_package(LZ4 REQUIRED)
 find_package(Bitshuffle REQUIRED)
 find_package(gemmi CONFIG REQUIRED)
-# find_package(CUDAToolkit REQUIRED)
 
 add_executable(predictor
     predict.cc
@@ -20,14 +23,11 @@ add_executable(predictor
 target_link_libraries(predictor
     PRIVATE
     fmt
-    h5read
+    dx2
     argparse
-    standalone
-    LZ4::LZ4
     Bitshuffle::bitshuffle
     nlohmann_json::nlohmann_json
     spdlog::spdlog
-    dx2
     version
     ffs_common
     Eigen3::Eigen

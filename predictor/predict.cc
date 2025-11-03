@@ -1383,7 +1383,7 @@ int main(int argc, char** argv) {
                         expt_path);
 #pragma endregion
 
-#pragma region Stills Prediction
+#pragma region Prediction
             if (prediction_type.experiment_type == ExperimentType::Stills) {
                 // A large enough angular tolerance allows plenty of Miller indices to be
                 // available for checking against a finer tolerance.
@@ -1438,12 +1438,12 @@ int main(int argc, char** argv) {
                     if (!ray) continue;
                     // Append the ray
                     auto impact = detector.get_ray_intersection(ray->s1);
-                    if (!impact) continue;
-
-                    auto panel = impact->first;
-                    auto coords_mm = impact->second;
-                    auto coords_px =
-                      detector.panels()[panel].mm_to_px(coords_mm[0], coords_mm[1]);
+                    if (!impact.has_value()) continue;
+                    intersection result = impact.value();
+                    auto panel = result.panel_id;
+                    auto coords_mm = result.xymm;
+                    auto coords_px = detector.panels()[panel].mm_to_px(
+                      coords_mm[0], coords_mm[1]);
 
                     hkl.insert(
                       hkl.end(), std::begin(index.value()), std::end(index.value()));
@@ -1534,7 +1534,7 @@ int main(int argc, char** argv) {
                         std::array<std::optional<Ray>, 2> rays;
                         if (beam_type == BeamType::Monochromatic) {
                             if (prediction_type.rotational_type
-                                == RotationalType::ScanVarying)
+                                == RotationalType::ScanVarying) {
                                 rays[0] = predict_ray_monochromatic_sv(index.value(),
                                                                        A1,
                                                                        A2,
@@ -1543,6 +1543,7 @@ int main(int argc, char** argv) {
                                                                        param_dmin,
                                                                        phi_beg,
                                                                        d_osc);
+                            }
                             else {
                                 // Monochromatic, Static, Rotation > 5 degrees.
                                 // This is a new use case not supported by DIALS.
@@ -1579,10 +1580,10 @@ int main(int argc, char** argv) {
                             if (!ray) continue;
                             // Append the ray
                             auto impact = detector.get_ray_intersection(ray->s1);
-                            if (!impact) continue;
-
-                            auto panel = impact->first;
-                            auto coords_mm = impact->second;
+                            if (!impact.has_value()) continue;
+                            intersection result = impact.value();
+                            auto panel = result.panel_id;
+                            auto coords_mm = result.xymm;
                             auto coords_px = detector.panels()[panel].mm_to_px(
                               coords_mm[0], coords_mm[1]);
 
