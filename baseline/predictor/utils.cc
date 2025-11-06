@@ -1,7 +1,8 @@
 #include <Eigen/Dense>
+#include <nlohmann/json.hpp>
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
-
+using json = nlohmann::json;
 #pragma once
 /**
  * @brief A class to store the axis of rotation and return a rotation matrix for a given angle using the Rodriguez formula.

@@ -17,10 +17,10 @@ find_package(LZ4 REQUIRED)
 find_package(Bitshuffle REQUIRED)
 find_package(gemmi CONFIG REQUIRED)
 
-add_executable(predictor
+add_executable(baseline_predictor
     predict.cc
 )
-target_link_libraries(predictor
+target_link_libraries(baseline_predictor
     PRIVATE
     fmt
     dx2

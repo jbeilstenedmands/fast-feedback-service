@@ -623,18 +623,18 @@ int main(int argc, char** argv) {
     // Store the size, once it has been verified as being consistent across columns.
     std::size_t sz = panels.size();
 
-    predicted.add_column<int32_t>("miller_index", {sz, 3}, hkl);
-    predicted.add_column<uint64_t>("panel", {sz}, panels);
-    predicted.add_column<bool>("entering", {sz}, enter);
-    predicted.add_column<double>("s1", {sz, 3}, s1);
-    predicted.add_column<double>("xyzcal.px", {sz, 3}, xyz_px);
-    predicted.add_column<double>("xyzcal.mm", {sz, 3}, xyz_mm);
-    predicted.add_column<uint64_t>("flags", {sz}, flags);
-    predicted.add_column<int32_t>("id", {sz}, ids);
-    if (delpsi.size()) predicted.add_column<double>("delpsical.rad", {sz}, delpsi);
+    predicted.add_column("miller_index", sz, 3, hkl);
+    predicted.add_column("panel", sz, 1, panels);
+    predicted.add_column("entering", sz, 1, enter);
+    predicted.add_column("s1", sz, 3, s1);
+    predicted.add_column("xyzcal.px", sz, 3, xyz_px);
+    predicted.add_column("xyzcal.mm", sz, 3, xyz_mm);
+    predicted.add_column("flags", sz, 1, flags);
+    predicted.add_column("id", sz, 1, ids);
+    if (delpsi.size()) predicted.add_column("delpsical.rad", sz, 1, delpsi);
     if (wavelength_cal.size())
-        predicted.add_column<double>("wavelength_cal", {sz}, wavelength_cal);
-    if (s0_cal.size()) predicted.add_column<double>("s0_cal", {sz, 3}, s0_cal);
+        predicted.add_column("wavelength_cal", sz, 1, wavelength_cal);
+    if (s0_cal.size()) predicted.add_column("s0_cal", sz, 3, s0_cal);
     predicted.set_experiment_ids(experiment_ids);
     predicted.set_identifiers(identifiers);
 
