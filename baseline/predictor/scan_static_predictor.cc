@@ -3,7 +3,6 @@
 #include <Eigen/Dense>
 #include <cassert>
 #include <cmath>
-#include <optional>
 #include <dx2/beam.hpp>
 #include <dx2/detector.hpp>
 #include <dx2/goniometer.hpp>
