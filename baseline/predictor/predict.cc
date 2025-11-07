@@ -164,7 +164,7 @@ struct scan_varying_data {
 
 predicted_data_rotation predict_rotation(
   const Goniometer& goniometer, const Scan& scan, const Crystal& crystal, const MonochromaticBeam& beam, const Detector& detector, const scan_varying_data& sv_data, double param_dmin){
-  bool scan_varying = false;
+  /*bool scan_varying = false;
   if (!sv_data.s0_at_scan_points.empty()){
     scan_varying = true;
   }
@@ -173,7 +173,7 @@ predicted_data_rotation predict_rotation(
   }
   else if (!sv_data.r_setting_at_scan_points.empty()){
     scan_varying = true;
-  }
+  }*/
   gemmi::GroupOps crystal_symmetry_operations = crystal.get_space_group().operations();
   const Matrix3d A = crystal.get_A_matrix();
   const Vector3d m2 = goniometer.get_rotation_axis();
@@ -224,17 +224,19 @@ predicted_data_rotation predict_rotation(
       );
 
       std::function<std::array<std::optional<Ray>, 2>(const std::array<int, 3>&)> predict_ray;
-      if (scan_varying) {
-          predict_ray = [=](const std::array<int, 3>& index) {
-              std::array<std::optional<Ray>, 2> rays;
-              rays[0] = predict_ray_monochromatic_sv(index, A1, A2, s0_1, s0_2, param_dmin, phi_beg, d_osc);
-              return rays;
-          };
-      } else {
-          predict_ray = [=](const std::array<int, 3>& index) {
-              return predict_ray_monochromatic_static(index, A1, r_setting_1, r_setting_1_inv, s0, m2, rotator, param_dmin, phi_beg, d_osc);
-          };
-      }
+      
+      // Note that using predict_ray_monochromatic_sv seems to be 2x faster than using
+      // predict_ray_monochromatic_static, and we have all the inputs required, so use that...
+      // Otherwise wrap in an if/else based on if any sv_data not being empty.
+      predict_ray = [=](const std::array<int, 3>& index) {
+          std::array<std::optional<Ray>, 2> rays;
+          rays[0] = predict_ray_monochromatic_sv(index, A1, A2, s0_1, s0_2, param_dmin, phi_beg, d_osc);
+          return rays;
+      };
+      /*predict_ray = [=](const std::array<int, 3>& index) {
+          return predict_ray_monochromatic_static(index, A1, r_setting_1, r_setting_1_inv, s0, m2, rotator, param_dmin, phi_beg, d_osc);
+      };*/
+      
 
       for (;;) {
         std::optional<std::array<int, 3>> index = index_generator.next();
