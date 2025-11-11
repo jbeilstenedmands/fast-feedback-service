@@ -156,13 +156,173 @@ struct predicted_data_rotation {
     }
 };
 
+// FIXME add method to add ids and identifiers at end of each expt
+
+// add method to finalise and return/write a reflection table for output.
+
+struct predicted_data_stills_poly : public predicted_data_rotation {
+  std::vector<double> s0_cal;
+  std::vector<double> wavelength_cal;
+  
+  void add(
+        const std::array<int, 3>& hkl_entry,
+        const std::array<double, 3>& s1_entry,
+        const std::array<double, 3>& xyz_px_entry,
+        const std::array<double, 3>& xyz_mm_entry,
+        const std::array<double, 3>& s0_cal_entry,
+        double wavelength_cal_entry,
+        uint64_t panel,
+        bool enter_flag,
+        uint64_t flag
+    ) {
+        predicted_data_rotation::add(hkl_entry, s1_entry, xyz_px_entry, xyz_mm_entry, panel, enter_flag, flag);
+        s0_cal.insert(s0_cal.end(), s0_cal_entry.begin(), s0_cal_entry.end());
+        wavelength_cal.push_back(wavelength_cal_entry);
+    }
+};
+
+struct predicted_data_stills_mono : public predicted_data_rotation {
+  std::vector<double> delpsi;
+  
+  void add(
+        const std::array<int, 3>& hkl_entry,
+        const std::array<double, 3>& s1_entry,
+        const std::array<double, 3>& xyz_px_entry,
+        const std::array<double, 3>& xyz_mm_entry,
+        double delpsi_entry,
+        uint64_t panel,
+        bool enter_flag,
+        uint64_t flag
+    ) {
+        predicted_data_rotation::add(hkl_entry, s1_entry, xyz_px_entry, xyz_mm_entry, panel, enter_flag, flag);
+        delpsi.push_back(delpsi_entry);
+    }
+};
+
 struct scan_varying_data {
   std::vector<Vector3d> s0_at_scan_points;
   std::vector<Matrix3d> A_at_scan_points;
   std::vector<Matrix3d> r_setting_at_scan_points;
 };
 
-predicted_data_rotation predict_rotation(
+// Overload helper struct for expt model types.
+template<typename... Ts>
+struct Overloaded : Ts... {
+    using Ts::operator()...;
+};
+
+double get_wavelength(const BeamModel& beam) {
+    return std::visit(Overloaded{
+        [](const MonochromaticBeam& b) { return b.get_wavelength(); },
+        [](const PolychromaticBeam& b) { return b.get_wavelength_range()[0]; }
+    }, beam);
+}
+
+void predict_poly_stills(predicted_data_stills_poly& data, const Crystal& crystal, const PolychromaticBeam& beam, const Detector& detector, double param_dmin){
+
+  double angular_tolerance = 0.0;
+  double wavelength = beam.get_wavelength_range()[0];
+  double wavelength_poly_max = beam.get_wavelength_range()[1];
+  Vector3d s0 = -1.0 * beam.get_sample_to_source_direction() / wavelength;
+  Vector3d s0_lower = s0 * wavelength / wavelength_poly_max;
+  Vector3d s0_normalized = s0.normalized();
+
+  gemmi::GroupOps crystal_symmetry_operations = crystal.get_space_group().operations();
+  const Matrix3d A = crystal.get_A_matrix();
+
+  // FIXME: This is very ugly because I had to make last-minute adjustments to accommodate
+  // polychromatic prediction. Perhaps it is a better ideas to branch into mono and poly first,
+  // then construct this generator! s0 here (for polychormatic) represents s0_upper (i.e. the
+  // s0 corresponding to the lower wavelength)
+  StillsIndexGenerator index_generator(
+    A, crystal_symmetry_operations, s0, s0_lower, angular_tolerance);
+
+  for (;;) {
+      auto index = index_generator.next();
+      if (!index) break;
+      std::optional<Ray> ray;
+      ray = predict_ray_polychromatic_stills(index.value(),
+                                                  A,
+                                                  s0_normalized,
+                                                  wavelength,
+                                                  wavelength_poly_max,
+                                                  param_dmin);
+
+      if (!ray) continue;
+      // Append the ray
+      auto impact = detector.get_ray_intersection(ray->s1);
+      if (!impact.has_value()) continue;
+      intersection result = impact.value();
+      auto panel = result.panel_id;
+      std::array<double, 3> coords_mm = {result.xymm[0], result.xymm[1], 0};
+      std::array<double, 2> xycoords_px = detector.panels()[panel].mm_to_px(
+        coords_mm[0], coords_mm[1]);
+      std::array<double, 3> coords_px = {xycoords_px[0], xycoords_px[1], 0.0};
+      std::array<double, 3> s1 = { ray->s1[0], ray->s1[1], ray->s1[2]};
+      double wavelength_cal = 1.0 / ray->s1.norm();
+      Vector3d s0_pred = s0.normalized() / ray->s1.norm();
+      std::array<double, 3> s0_cal = {s0_pred[0], s0_pred[1], s0_pred[2]};
+      data.add(index.value(), s1, coords_px, coords_mm, s0_cal, wavelength_cal, panel, ray->entering, predicted_flag);
+  }
+}
+
+void predict_mono_stills(predicted_data_stills_mono& data, const Crystal& crystal, const MonochromaticBeam& beam, const Detector& detector, double param_dmin, double ML_domain_size_ang=0.0, double ML_half_mosaicity_deg=0.0){
+  // A large enough angular tolerance allows plenty of Miller indices to be
+  // available for checking against a finer tolerance.
+  // Typical delta_psi tolerance is 0.0015, so a default of 0.005 is reasonable.
+  // FIXME: Is there a clean way to determine this dynamically if the
+  // mosaicity values are provided in the experiment file? (See below.)
+  gemmi::GroupOps crystal_symmetry_operations = crystal.get_space_group().operations();
+  const Matrix3d A = crystal.get_A_matrix();
+
+  double angular_tolerance = 0.005;
+  // FIXME: This is very ugly because I had to make last-minute adjustments to accommodate
+  // polychromatic prediction. Perhaps it is a better ideas to branch into mono and poly first,
+  // then construct this generator! s0 here (for polychormatic) represents s0_upper (i.e. the
+  // s0 corresponding to the lower wavelength)
+  Vector3d s0 = beam.get_s0();
+  StillsIndexGenerator index_generator(
+    A, crystal_symmetry_operations, s0, s0, angular_tolerance);
+
+  for (;;) {
+      auto index = index_generator.next();
+      if (!index) break;
+
+      // Check if a reflection occurs at the given Miller index
+      // within the required resolution.
+      std::optional<Ray> ray;
+      double delta_psi_tolerance = 0.0015;
+      // Increase tolerance for mosaic crystal model.
+      if (ML_domain_size_ang != 0.0 && ML_half_mosaicity_deg != 0.0){
+          Vector3d h_vec = {(double)index.value()[0],
+                            (double)index.value()[1],
+                            (double)index.value()[2]};
+          double d = 1.0 / (A * h_vec).norm();
+          delta_psi_tolerance =
+            (d / ML_domain_size_ang)
+            + (ML_half_mosaicity_deg * M_PI / 360);
+      }
+      ray = predict_ray_monochromatic_stills(
+        index.value(), A, s0, param_dmin, delta_psi_tolerance);
+
+
+      if (!ray) continue;
+      // Append the ray
+      auto impact = detector.get_ray_intersection(ray->s1);
+      if (!impact.has_value()) continue;
+      intersection result = impact.value();
+      auto panel = result.panel_id;
+      std::array<double, 3> coords_mm = {result.xymm[0], result.xymm[1], 0};
+      std::array<double, 2> xycoords_px = detector.panels()[panel].mm_to_px(
+        coords_mm[0], coords_mm[1]);
+      std::array<double, 3> coords_px = {xycoords_px[0], xycoords_px[1], 0.0};
+      std::array<double, 3> s1 = { ray->s1[0], ray->s1[1], ray->s1[2]};
+      double delpsi = ray->angle;
+      data.add(index.value(), s1, coords_px, coords_mm, delpsi, panel, ray->entering, predicted_flag);
+  }
+}
+
+void predict_rotation(predicted_data_rotation& data,
   const Goniometer& goniometer, const Scan& scan, const Crystal& crystal, const MonochromaticBeam& beam, const Detector& detector, const scan_varying_data& sv_data, double param_dmin){
   /*bool scan_varying = false;
   if (!sv_data.s0_at_scan_points.empty()){
@@ -189,7 +349,7 @@ predicted_data_rotation predict_rotation(
 
   Vector3d s0 = beam.get_s0();
 
-  predicted_data_rotation output_data; // to store the predictions.
+  //predicted_data_rotation output_data; // to store the predictions.
   bool use_mono = true;
 
   for (int frame = z0; frame < z1; frame++) {
@@ -204,7 +364,7 @@ predicted_data_rotation predict_rotation(
       Matrix3d A2 = sv_data.A_at_scan_points.empty() ? A : sv_data.A_at_scan_points[image_index+1];
       Matrix3d r_setting_1 = sv_data.r_setting_at_scan_points.empty() ? r_setting : sv_data.r_setting_at_scan_points[image_index];
       Matrix3d r_setting_2 = sv_data.r_setting_at_scan_points.empty() ? r_setting : sv_data.r_setting_at_scan_points[image_index+1];
-      Matrix3d r_setting_1_inv = r_setting_1.inverse();
+      //Matrix3d r_setting_1_inv = r_setting_1.inverse();
       // Redefine A1 and A2 to encompass all 3 rotations
       const double phi_beg = osc0 + image_index * d_osc;
       const double phi_end = phi_beg + d_osc;
@@ -259,13 +419,29 @@ predicted_data_rotation predict_rotation(
             coords_mm[0], coords_mm[1]);
           std::array<double, 3> coords_px = {xycoords_px[0], xycoords_px[1], frame};
           std::array<double, 3> s1 = { ray->s1[0], ray->s1[1], ray->s1[2] };
-          output_data.add(index.value(), s1, coords_px, coords_mm, panel, ray->entering, predicted_flag);
+          data.add(index.value(), s1, coords_px, coords_mm, panel, ray->entering, predicted_flag);
         }
       }
 
   }
-  
-  return output_data;
+}
+
+class MonoRotationPredictor {
+    public:
+        MonoRotationPredictor()=default;
+        void predict(Experiment expt, double dmin){
+          // Runs the prediction for a single experiment, aggregating
+          // the output into combined data arrays for multi-experiment cases.
+          predict_rotation(_output_data);
+        }
+        ReflectionTable make_table(std::string filename){
+          // Called at the end to return the combined data as a table.
+          // FIXME use std::move?
+          return _output_data.make_table(filename);
+        }
+
+    private:
+        predicted_data_rotation _output_data{};
 }
 
 int main(int argc, char** argv) {
@@ -297,7 +473,16 @@ int main(int argc, char** argv) {
     
     
     predicted_data_rotation output_data;
+    predicted_data_stills_mono output_mono_stills;
+    predicted_data_stills_poly output_poly_stills;
 #pragma endregion
+
+    // First parse experiment list.
+    // Check if all stills or all scans and then dispatch to correct function.
+
+    // If stills, further branching for poly/mono.
+
+    // Scan varying only relevant for non-stills (obvs)
 
     for (const std::string& expt_path : param_expt_paths) {
         // Get data from .expt file
@@ -321,7 +506,7 @@ int main(int argc, char** argv) {
             const std::string identifier = expt_details.at("identifier");
 
             // Obtain the indices indicating where experiment data can be found
-            const std::size_t i_detector = expt_details.at("detector");
+            // = expt_details.at("detector");
             const std::size_t i_goniometer = expt_details.at("goniometer");
             const std::size_t i_scan = expt_details.at("scan");
             const std::size_t i_crystal = expt_details.at("crystal");
@@ -380,7 +565,20 @@ int main(int argc, char** argv) {
             Vector3d s0;
             // Use the below for polychromatic prediction only
             double wavelength_poly_max = 0;
-            Experiment<MonochromaticBeam> mono_expt;
+            Experiment expt(data);
+
+            double wavelength = std::visit([](const auto& beam) -> double {
+                if constexpr (std::is_same_v<std::decay_t<decltype(beam)>, MonochromaticBeam>) {
+                    return beam.get_wavelength();
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(beam)>, PolychromaticBeam>) {
+                    return beam.get_wavelength_range()[0];
+                } else {
+                    throw std::runtime_error("Unknown beam type");
+                }
+            }, experiment.beam());
+
+
+            /*Experiment<MonochromaticBeam> mono_expt;
             Experiment<PolychromaticBeam> poly_expt;
             if (beam_data.at("__id__") == "monochromatic") {
                 mono_expt = Experiment<MonochromaticBeam>(data);
@@ -400,7 +598,7 @@ int main(int argc, char** argv) {
                 logger.error(
                   "The beam's __id__ should be either monochromatic or polychromatic.");
                 std::exit(1);
-            }
+            }*/
 #pragma endregion
 
 #pragma region Determine dmin
@@ -430,6 +628,11 @@ int main(int argc, char** argv) {
                                            RotationalType::Static};
             ScanVaryingType sv_type;
 
+
+            // Either we have a still experiment or rotation.
+            // If rotation - we have the option to force scan varying models to
+            // be static, else we load the scan varying data arrays as these
+            // are not yet handled by dx2 models.
             scan_varying_data sv_data;
 
             json s0_at_scan_points;
@@ -528,226 +731,51 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region Prediction
-            /*if (prediction_type.experiment_type == ExperimentType::Stills) {
-                // A large enough angular tolerance allows plenty of Miller indices to be
-                // available for checking against a finer tolerance.
-                // Typical delta_psi tolerance is 0.0015, so a default of 0.005 is reasonable.
-                // FIXME: Is there a clean way to determine this dynamically if the
-                // mosaicity values are provided in the experiment file? (See below.)
 
-                double angular_tolerance =
-                  (beam_type == BeamType::Monochromatic) ? 0.005 : 0;
-                Vector3d s0_lower = s0 * wavelength / wavelength_poly_max;
-                // FIXME: This is very ugly because I had to make last-minute adjustments to accommodate
-                // polychromatic prediction. Perhaps it is a better ideas to branch into mono and poly first,
-                // then construct this generator! s0 here (for polychormatic) represents s0_upper (i.e. the
-                // s0 corresponding to the lower wavelength)
-                StillsIndexGenerator index_generator(
-                  A, crystal_symmetry_operations, s0, s0_lower, angular_tolerance);
+            // for different data types, use polymorphism or variants:
+            //std::unique_ptr<OutputStillsBase> output_stills;
 
-                for (;;) {
-                    auto index = index_generator.next();
-                    if (!index) break;
-
-                    // Check if a reflection occurs at the given Miller index
-                    // within the required resolution.
-                    std::optional<Ray> ray;
-                    if (beam_type == BeamType::Monochromatic) {
-                        double delta_psi_tolerance = 0.0015;
-                        if (crystal_data.find("mosaicity") != crystal_data.end()
-                            && crystal_data.at("mosaicity") > 0) {
-                            double ML_domain_size_ang =
-                              crystal_data.at("ML_domain_size_ang");
-                            double ML_half_mosaicity_deg =
-                              crystal_data.at("ML_half_mosaicity_deg");
-                            Vector3d h_vec = {(double)index.value()[0],
-                                              (double)index.value()[1],
-                                              (double)index.value()[2]};
-                            double d = 1.0 / (A * h_vec).norm();
-                            delta_psi_tolerance =
-                              (d / ML_domain_size_ang)
-                              + (ML_half_mosaicity_deg * M_PI / 360);
-                        }
-                        ray = predict_ray_monochromatic_stills(
-                          index.value(), A, s0, param_dmin, delta_psi_tolerance);
-                    } else
-                        // AKA Laue prediction
-                        ray = predict_ray_polychromatic_stills(index.value(),
-                                                               A,
-                                                               s0.normalized(),
-                                                               wavelength,
-                                                               wavelength_poly_max,
-                                                               param_dmin);
-
-                    if (!ray) continue;
-                    // Append the ray
-                    auto impact = detector.get_ray_intersection(ray->s1);
-                    if (!impact.has_value()) continue;
-                    intersection result = impact.value();
-                    auto panel = result.panel_id;
-                    auto coords_mm = result.xymm;
-                    auto coords_px = detector.panels()[panel].mm_to_px(
-                      coords_mm[0], coords_mm[1]);
-                    
-                    output_data.add(index, ray->s1, coords_px, coords_mm, )
-
-                    hkl.insert(
-                      hkl.end(), std::begin(index.value()), std::end(index.value()));
-                    enter.push_back(ray->entering);
-                    s1.insert(s1.end(), std::begin(ray->s1), std::end(ray->s1));
-                    xyz_mm.insert(
-                      xyz_mm.end(), std::begin(coords_mm), std::end(coords_mm));
-                    xyz_mm.push_back(0);
-                    xyz_px.insert(
-                      xyz_px.end(), std::begin(coords_px), std::end(coords_px));
-                    xyz_px.push_back(0);
-                    panels.push_back(panel);
-                    flags.push_back(predicted_flag);
-                    if (beam_type == BeamType::Monochromatic){
-                        delpsi.push_back(ray->angle);
-	            }
-                    else {
-                        wavelength_cal.push_back(1.0 / ray->s1.norm());
-                        Vector3d s0_pred = s0.normalized() / ray->s1.norm();
-                        s0_cal.insert(
-                          s0_cal.end(), std::begin(s0_pred), std::end(s0_pred));
-                    }
-                }
-            }*/
-            //else {
-            output_data = predict_rotation(goniometer, scan, crystal, mono_expt.beam(), detector, sv_data, param_dmin);
-            /*    // Rotational-experiment-specific code goes here
-                output_data = predict_rotation();
-
-                const Vector3d m2 = goniometer.get_rotation_axis();
-                // A Rotator object that generates rotations around axis m2
-                const Rotator rotator(m2);
-                const Matrix3d r_fixed = goniometer.get_sample_rotation();
-                const Matrix3d r_setting = goniometer.get_setting_rotation();
-                const double d_osc = scan.get_oscillation()[1];
-
-                int z0 = scan.get_image_range()[0] - 1;
-                int z1 = scan.get_image_range()[1];
-
-                for (int frame = z0; frame < z1; frame++) {
-                    int image_index = frame - z0;
-
-                    // Define the potentially scan-varying vector (s0) and matrices (A and r_setting)
-                    Vector3d s0_1 =
-                      sv_type.beam ? vector_3d_from_json(s0_at_scan_points[image_index])
-                                   : s0;
-                    Vector3d s0_2 =
-                      sv_type.beam
-                        ? vector_3d_from_json(s0_at_scan_points[image_index + 1])
-                        : s0;
-                    Matrix3d A1 = sv_type.crystal
-                                    ? matrix_3d_from_json(A_at_scan_points[image_index])
-                                    : A;
-                    Matrix3d A2 =
-                      sv_type.crystal
-                        ? matrix_3d_from_json(A_at_scan_points[image_index + 1])
-                        : A;
-                    Matrix3d r_setting_1 =
-                      sv_type.r_setting
-                        ? matrix_3d_from_json(r_setting_at_scan_points[image_index])
-                        : r_setting;
-                    Matrix3d r_setting_2 =
-                      sv_type.r_setting
-                        ? matrix_3d_from_json(r_setting_at_scan_points[image_index + 1])
-                        : r_setting;
-
-                    // Redefine A1 and A2 to encompass all 3 rotations
-                    const double phi_beg = osc0 + image_index * d_osc;
-                    const double phi_end = phi_beg + d_osc;
-                    Matrix3d r_beg = rotator.rotation_matrix(phi_beg);
-                    Matrix3d r_end = rotator.rotation_matrix(phi_end);
-                    A1 = r_setting_1 * r_beg * r_fixed * A1;
-                    A2 = r_setting_2 * r_end * r_fixed * A2;
-
-                    ReekeIndexGenerator index_generator(
-                      A1,
-                      A2,
-                      crystal_symmetry_operations,
-                      s0_1,
-                      s0_2,
-                      param_dmin,
-                      beam_type == BeamType::Monochromatic);
-
-                    for (;;) {
-                        auto index = index_generator.next();
-                        if (!index) break;
-
-                        // Check if a reflection occurs at the given Miller index
-                        // within the required resolution.
-                        std::array<std::optional<Ray>, 2> rays;
-                        
-                        if (prediction_type.rotational_type
-                            == RotationalType::ScanVarying) {
-                            rays[0] = predict_ray_monochromatic_sv(index.value(),
-                                                                    A1,
-                                                                    A2,
-                                                                    s0_1,
-                                                                    s0_2,
-                                                                    param_dmin,
-                                                                    phi_beg,
-                                                                    d_osc);
-                        }
-                        else {
-                            // Monochromatic, Static, Rotation > 5 degrees.
-                            // This is a new use case not supported by DIALS.
-                            // For d_osc > 10 degrees, this exact calculator is much better
-                            // than the DIALS-style approximate predictor
-                            rays = predict_ray_monochromatic_static(
-                              index.value(),
-                              A1,
-                              r_setting_1,
-                              r_setting_1.inverse(),
-                              s0,
-                              m2,
-                              rotator,
-                              param_dmin,
-                              phi_beg,
-                              d_osc);
-                        }
-
-                        for (std::optional<Ray> ray : rays) {
-                            if (!ray) continue;
-                            // Append the ray
-                            auto impact = detector.get_ray_intersection(ray->s1);
-                            if (!impact.has_value()) continue;
-                            intersection result = impact.value();
-                            auto panel = result.panel_id;
-                            auto coords_mm = result.xymm;
-                            auto coords_px = detector.panels()[panel].mm_to_px(
-                              coords_mm[0], coords_mm[1]);
-
-                            // Get the frame that a reflection with this angle will be observed at
-                            double frame = z0 + (ray->angle - osc0) / d_osc;
-
-                            hkl.insert(hkl.end(),
-                                       std::begin(index.value()),
-                                       std::end(index.value()));
-                            enter.push_back(ray->entering);
-                            s1.insert(s1.end(), std::begin(ray->s1), std::end(ray->s1));
-                            xyz_mm.insert(
-                              xyz_mm.end(), std::begin(coords_mm), std::end(coords_mm));
-                            xyz_mm.push_back(ray->angle * M_PI / 180);
-                            xyz_px.insert(
-                              xyz_px.end(), std::begin(coords_px), std::end(coords_px));
-                            xyz_px.push_back(frame);
-                            panels.push_back(panel);
-                            flags.push_back(predicted_flag);
-                        }
-                    }
-                }
+            /*if (beam_type == BeamType::Polychromatic) {
+                output_stills = std::make_unique<OutputPolyStills>();
+                predict_poly_stills(static_cast<OutputPolyStills&>(*output_stills), crystal, poly_expt.beam(), detector, param_dmin);
+            } else {
+                output_stills = std::make_unique<OutputMonoStills>();
+                predict_mono_stills(static_cast<OutputMonoStills&>(*output_stills), crystal, mono_expt.beam(), detector, param_dmin);
             }
 
-            std::size_t num_new_reflections = panels.size() - num_reflections_initial;
-            std::vector<int32_t> new_ids(num_new_reflections, i_expt);
-            ids.insert(ids.end(), new_ids.begin(), new_ids.end());
-            experiment_ids.push_back(i_expt);
-            identifiers.push_back(identifier);
+            // Now operate on output_stills without branching
+            output_stills->finalize(); */
+
+            /*
+            std::variant<OutputPolyStills, OutputMonoStills> output_stills;
+
+            if (beam_type == BeamType::Polychromatic) {
+                output_stills = OutputPolyStills{};
+                predict_poly_stills(std::get<OutputPolyStills>(output_stills), crystal, poly_expt.beam(), detector, param_dmin);
+            } else {
+                output_stills = OutputMonoStills{};
+                predict_mono_stills(std::get<OutputMonoStills>(output_stills), crystal, mono_expt.beam(), detector, param_dmin);
+            }
+
+            // Later:
+            std::visit([](auto& output) {
+                output.finalize();  // works if both types have finalize()
+            }, output_stills);
             */
+
+            if (scan.get_oscillation()[1] == 0.0){
+              if (beam_type == BeamType::Polychromatic){
+                predict_poly_stills(output_poly_stills, crystal, poly_expt.beam(), poly_expt.detector(), param_dmin);
+              }
+              else {
+                predict_mono_stills(output_mono_stills, crystal, mono_expt.beam(), mono_expt.detector(), param_dmin);
+              }
+            }
+            else {
+              predict_rotation(output_data, goniometer, scan, crystal, mono_expt.beam(), mono_expt.detector(), sv_data, param_dmin);
+            }
+            // FIXME needs to work on any output data type.
+            // This aggregates data over expts in a multi experiment case.
             std::size_t num_new_reflections = output_data.panels.size() - num_reflections_initial;
             std::vector<int32_t> new_ids(num_new_reflections, i_expt);
             output_data.ids.insert(output_data.ids.end(), new_ids.begin(), new_ids.end());
