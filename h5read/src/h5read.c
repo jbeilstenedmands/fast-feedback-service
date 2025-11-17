@@ -782,8 +782,13 @@ void read_detector_metadata(h5read_handle *obj) {
                                  "/entry/instrument/detector/distance",
                                  &obj->detector_distance)
         < 0) {
-        fprintf(stderr, "Warning: No detector distance found\n");
-        obj->detector_distance = -1;
+        if (_read_single_value_float(obj->master_file,
+                                 "/entry/instrument/detector/detector_distance",
+                                 &obj->detector_distance)
+        < 0) {
+            fprintf(stderr, "Warning: No detector distance found\n");
+            obj->detector_distance = -1;
+        }
     }
     if (_read_single_value_float(obj->master_file,
                                  "/entry/instrument/detector/sensor_thickness",

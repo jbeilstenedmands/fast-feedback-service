@@ -6,6 +6,7 @@
 #include <dx2/beam.hpp>
 #include <dx2/crystal.hpp>
 #include <dx2/detector.hpp>
+#include <dx2/detector_attenuations.hpp>
 #include <dx2/experiment.hpp>
 #include <dx2/goniometer.hpp>
 #include <dx2/imageset.hpp>
@@ -77,9 +78,9 @@ int main(int argc, char **argv) {
     // Need to extract these
     std::string fast_axis = "x";
     std::string slow_axis = "-y";
-    // FIXME - need to extract sensor material, then define and use
-    // lookup tables in detector to calculate mu for the wavelength.
-    double mu = 3.0;
+    // FIXME - need to extract sensor material and set it on the detector.
+    std::string material = "Si";
+    double mu = calculate_mu_for_material_at_wavelength(material, wavelength);
 
     Experiment<MonochromaticBeam> expt;
 
@@ -87,7 +88,7 @@ int main(int argc, char **argv) {
     expt.set_beam(beam);
     Scan scan({1,num_images}, {oscillation_start, oscillation_width});
     expt.set_scan(scan);
-    // FIXME get rotation axes aßnd update gonio
+    // FIXME get rotation axes and update gonio
     std::array<int, 2> image_size = {width, height};
     Panel panel(distance, beam_center_array, 
         pixel_size_array, image_size,
