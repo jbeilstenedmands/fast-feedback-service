@@ -9,7 +9,7 @@
 #include <dx2/detector_attenuations.hpp>
 #include <dx2/experiment.hpp>
 #include <dx2/goniometer.hpp>
-#include <dx2/imageset.hpp>
+#include <dx2/imagesequence.hpp>
 #include <dx2/scan.hpp>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -83,6 +83,7 @@ int main(int argc, char **argv) {
     double mu = calculate_mu_for_material_at_wavelength(material, wavelength);
 
     Experiment<MonochromaticBeam> expt;
+    expt.generate_identifier();
 
     MonochromaticBeam beam(wavelength);
     expt.set_beam(beam);
@@ -97,8 +98,7 @@ int main(int argc, char **argv) {
     Detector detector(panels);
     expt.set_detector(detector);
     ImageSequence imagesequence(nxs_file, num_images);
-    json imageset_json = imagesequence.to_json();
-    expt.set_imageset_json(imageset_json);
+    expt.set_imagesequence(imagesequence);
 
     json elist_out = expt.to_json();
     std::string efile_name = "imported.expt";
