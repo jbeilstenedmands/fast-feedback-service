@@ -14,12 +14,13 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <format>
+#include <sstream>
 
 int main(int argc, char **argv) {
     // This program creates dx2 experiment models from nxmx-format data.
     auto t1 = std::chrono::system_clock::now();
     auto parser = argparse::ArgumentParser();
-    parser.add_argument("--file").help("Path to the nexus file");
+    parser.add_argument("file").help("Path to the nexus file").metavar("FILE.nxs");
     // Beam options
     parser.add_argument("-w", "--wavelength", "--beam.wavelength")
         .help("Wavelength of the X-ray beam (Å)")
@@ -49,21 +50,24 @@ int main(int argc, char **argv) {
         .scan<'f', float>();
     // Scan options
     parser.add_argument("--image-range", "--scan.image-range")
-        .help("The subset of image from the nxs file for processing")
+        .help("The subset of images from the nxs file for processing")
         .nargs(2)
         .scan<'i', int>();
     parser.add_argument("--scan.oscillation-start")
-        .help("The starting angle of the scan")
+        .help("The starting angle of the scan (°)")
         .scan<'f', float>();
     parser.add_argument("--scan.oscillation-width")
-        .help("The rotation width of each image in the scan")
+        .help("The rotation width of each image in the scan (°)")
         .scan<'f', float>();
 
-    parser.parse_args(argc, argv);
-
-    if (!parser.is_used("file")) {
-        fmt::print("Error: filepath to the .nxs file must be specified with --file\n");
-        std::exit(1);
+    try {
+        parser.parse_args(argc, argv);
+    } catch (const std::runtime_error& err) {
+        std::ostringstream oss;
+        oss << parser;
+        logger.info(oss.str()); // print help
+        logger.error("Error: {}", err.what());
+        return 1;
     }
     
     // Get the nexus file and create the reader.
