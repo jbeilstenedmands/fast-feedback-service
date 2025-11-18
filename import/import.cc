@@ -59,6 +59,26 @@ int main(int argc, char **argv) {
     parser.add_argument("--scan.oscillation-width")
         .help("The rotation width of each image in the scan (°)")
         .scan<'f', float>();
+    // Goniometer options
+    parser.add_argument("--axis", "--goniometer.single.axis") // primary indicator of single axis gonio.
+        .nargs(3)
+        .scan<'g', double>();
+    parser.add_argument("--fixed-rotation", "--goniometer.single.fixed-rotation") // defaults to identitiy
+        .nargs(9)
+        .scan<'g', double>();
+    parser.add_argument("--setting-rotation", "--goniometer.single.setting-rotation") // defaults to identitiy
+        .nargs(9)
+        .scan<'g', double>();
+    parser.add_argument("--axes", "--goniometer.multi.axes") // primary indicator of multi axis gonio (if single axis given, then equivalent to single axis gonio).
+        .nargs(argparse::nargs_pattern::at_least_one)
+        .scan<'g', double>();
+    parser.add_argument("--angles", "--goniometer.multi.angles") // defaults to 0 for each axis
+        .nargs(argparse::nargs_pattern::at_least_one)
+        .scan<'g', double>();
+    parser.add_argument("--names", "--goniometer.multi.names") // defaults to "" for each axis
+        .nargs(argparse::nargs_pattern::at_least_one);
+    parser.add_argument("--scan-axis", "--goniometer.multi.scan-axis") // defaults to 0
+        .scan<'u', uint32_t>();
 
     try {
         parser.parse_args(argc, argv);
@@ -185,7 +205,83 @@ int main(int argc, char **argv) {
 
 #pragma endregion
 
-    // FIXME detector, goniometer, 
+#pragma region Goniometer
+
+    Goniometer goniometer;
+
+    if (parser.is_used("goniometer.single.axis")){
+        auto vec = parser.get<std::vector<double>>("goniometer.single.axis");
+        Vector3d axis = {vec[0], vec[1], vec[2]};
+        Matrix3d setting_rotation;
+        Matrix3d fixed_rotation;
+        setting_rotation << 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0;
+        fixed_rotation << 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0;
+        if (parser.is_used("goniometer.single.setting-rotation")){
+            auto s_r = parser.get<std::vector<double>>("goniometer.single.setting-rotation");
+            setting_rotation << s_r[0], s_r[1], s_r[2], s_r[3], s_r[4], s_r[5], s_r[6], s_r[7], s_r[8];
+        }
+        if (parser.is_used("goniometer.single.fixed-rotation")){
+            auto f_r = parser.get<std::vector<double>>("goniometer.single.fixed-rotation");
+            fixed_rotation << f_r[0], f_r[1], f_r[2], f_r[3], f_r[4], f_r[5], f_r[6], f_r[7], f_r[8];
+        }
+        goniometer = Goniometer(fixed_rotation, axis, setting_rotation);
+        expt.set_goniometer(goniometer);
+        logger.info("Created a single-axis goniometer model with rotation axis ({:.3f}, {:.3f}, {:.3f})", axis[0], axis[1], axis[2]);
+    }
+    else if (parser.is_used("goniometer.multi.axes")){
+        std::vector<Vector3d> axes;
+        std::vector<double> angles;
+        std::vector<std::string> names;
+        std::size_t scan_axis = 0;
+        std::vector<double> input_axes = parser.get<std::vector<double>>("goniometer.multi.axes");
+        if (input_axes.size() % 3 != 0){
+            throw std::invalid_argument("The number of values input to parameter goniometer.multi.axes must be a multiple of three, as it is a list of vectors");
+        }
+        for (int i=0;i<input_axes.size() / 3;++i){
+            axes.push_back(Vector3d(input_axes[i*3], input_axes[i*3+1], input_axes[i*3+2]));
+        }
+        if (parser.is_used("goniometer.multi.angles")){
+            std::vector<double> input_angles = parser.get<std::vector<double>>("goniometer.multi.angles");
+            if (input_angles.size() != axes.size()){
+                throw std::invalid_argument(std::format("The number of angles provided ({}) must match the number of axes ({})", input_angles.size(), axes.size()));
+            }
+            angles = input_angles;
+        }
+        else {
+            for (int i=0;i<axes.size();++i){
+                angles.push_back(0.0);
+            }
+        }
+        if (parser.is_used("goniometer.multi.names")){
+            std::vector<std::string> input_names = parser.get<std::vector<std::string>>("goniometer.multi.names");
+            if (input_names.size() != axes.size()){
+                throw std::invalid_argument(std::format("The number of names provided ({}) must match the number of axes ({})", input_names.size(), axes.size()));
+            }
+            names = input_names;
+        }
+        else {
+            for (int i=0;i<axes.size();++i){
+                names.push_back("");
+            }
+        }
+        if (parser.is_used("goniometer.multi.scan-axis")){
+            scan_axis = static_cast<std::size_t>(parser.get<uint32_t>("goniometer.multi.scan-axis"));
+            if (scan_axis >= axes.size()){
+                throw std::invalid_argument(std::format("The specified scan axis index ({}) must be lower than the number of axes ({}).", scan_axis, axes.size()));
+            }
+        }
+        goniometer = Goniometer(axes, angles, names, scan_axis);
+        expt.set_goniometer(goniometer);
+        logger.info("Created a multi-axis goniometer model");
+    }
+    else {
+        logger.info("Defaulting to single-axis goniometer with rotation axis (1,0,0)");
+        // Don't need to set anything as will use the default gonio model.
+    }
+
+#pragma endregion
+
+    // FIXME detector 
 
     auto beam_center = reader.get_beam_center().value();
     auto pixel_size = reader.get_pixel_size().value();
