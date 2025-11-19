@@ -173,33 +173,35 @@ int main(int argc, char **argv) {
     // is available from the reader.
 
 #pragma region Beam
-    float wavelength = 0.0;
     json beam_data;
-    // If reference, use this to create a beam data json, which can be later updated with custom options.
+    beam_data["wavelength"] = 0.0;
+    // If we have a reference geometry, use this to create a beam data json, else load as
+    // much as we can from the reader.
+    // These are then updated later with any custom options.
     if (use_reference_beam){
         beam_data = reference_expt.beam().to_json();
-        wavelength = reference_expt.beam().get_wavelength();
         logger.info("Using reference beam model as starting model.");
     }
-
-    // wavelength MUST be provided/found, as there is no sensible default.
-    if (parser.is_used("beam.wavelength")){
-        wavelength = parser.get<float>("beam.wavelength");
+    else {
+        if (reader.get_wavelength().has_value()){
+            beam_data["wavelength"] = reader.get_wavelength().value();
+        }
+        // FIXME add in the rest of the reader beam properties here.
     }
-    if (wavelength <= 0.0 && reader.get_wavelength().has_value()){
-        wavelength = reader.get_wavelength().value();
-    }
-    if (wavelength <= 0.0){
-        throw std::runtime_error("No wavelength value found in file, and not provided as an input option with --beam.wavelength");
-    }
-    beam_data["wavelength"] = wavelength;
     
-    // other beam properties can be defaults if not specified.
-    // First check if they are specified as arguments, else try the reader if this property exists.
+    // Now check parser options.
+    if (parser.is_used("beam.wavelength")){
+        beam_data["wavelength"] = parser.get<float>("beam.wavelength");
+    }
+    // wavelength MUST be provided/found, as there is no sensible default.
+    if (beam_data["wavelength"] <= 0.0){
+        throw std::runtime_error("No wavelength value found in file, and not provided as an input option with --beam.wavelength or --reference_geometry");
+    }
+    
+    // other beam properties fall back to defaults if not specified.
     if (parser.is_used("beam.direction")){
         beam_data["direction"] = parser.get<std::vector<float>>("beam.direction");
     }
-    // Then if direction not in beam_data - know not reference or user option, then can see if anything from reader.
     if (parser.is_used("beam.divergence")){
         beam_data["divergence"] = parser.get<float>("beam.divergence");
     }
@@ -221,6 +223,7 @@ int main(int argc, char **argv) {
 
     MonochromaticBeam beam(beam_data);
     expt.set_beam(beam);
+    double wavelength = beam_data["wavelength"];
     logger.info("Created a monochromatic beam model with wavelength {:.6f}Å", wavelength);
 
 #pragma endregion
@@ -278,13 +281,18 @@ int main(int argc, char **argv) {
 
     Goniometer goniometer;
     json goniometer_data;
-    // If reference, use this to create a goniometer data json, which can be later updated with custom options.
+    // If we have a reference geometry, use this to create a goniometer data json, else load as
+    // much as we can from the reader.
+    // These are then updated later with any custom options.
     // Need to be slightly careful about single/multi axis goniometers - we only want one type of data to be
     // in the goniometer json.
     if (use_reference_goniometer){
         goniometer_data = reference_expt.goniometer().to_json();
         logger.info("Using reference goniometer model as starting model.");
     }
+    /*else {
+        //FIXME get reader to parse nxs file for goniometer options.
+    }*/
 
     if (parser.is_used("goniometer.single.axis")){
         if (goniometer_data.contains("axes")){
@@ -374,36 +382,78 @@ int main(int argc, char **argv) {
 
 #pragma endregion
 
-    // FIXME detector 
+    // FIXME detector
+    // The simplest way to configure a detector is with distance and beam centre, then assuming
 
-    auto beam_center = reader.get_beam_center().value();
-    auto pixel_size = reader.get_pixel_size().value();
-    double distance = reader.get_detector_distance().value()*1000.0;
-    double thickness = reader.get_detector_sensor_thickness().value()*1000.0;
-    int height = reader.image_shape()[0];
-    int width = reader.image_shape()[1];
-    std::array<double, 2> beam_center_array = {
-        static_cast<double>(beam_center[1]),
-        static_cast<double>(beam_center[0])
-    };
-    std::array<double, 2> pixel_size_array = {
-        static_cast<double>(pixel_size[0]) * 1000.0,
-        static_cast<double>(pixel_size[1]) * 1000.0
-    };
-    // Need to extract these
-    std::string fast_axis = "x";
-    std::string slow_axis = "-y";
-    // FIXME - need to extract sensor material and set it on the detector.
-    std::string material = "Si";
-    double mu = calculate_mu_for_material_at_wavelength(material, wavelength);
+#pragma region Detector
+    json panel_data;
+    json detector_data;
+    // full spec - fast, slow, origin, pixel_size, image_size, trusted_range, type, name, thickness, mu,
+    // raw_image_offset, pedestal, pxmm strategy.
+    
+    if (use_reference_detector){
+        detector_data = reference_expt.detector().to_json();
+        if (detector_data["panels"].size() > 1){
+            throw std::invalid_argument("The reference detector is multi-panel, only single panel detectors are currently supported.");
+        }
+        logger.info("Constructing detector model from reference experiment.");
+    }
+    else {
+        // Get from the reader.
+        // Assuming single panel.
+        // FIXME - need to extract sensor material and set it on the detector.
+        std::string material = "Si";
+        double mu = calculate_mu_for_material_at_wavelength(material, beam_data["wavelength"]);
+        panel_data["mu"] = mu;
+        double thickness = reader.get_detector_sensor_thickness().value()*1000.0;
+        panel_data["thickness"] = thickness;
 
-    std::array<int, 2> image_size = {width, height};
-    Panel panel(distance, beam_center_array, 
+        auto beam_center = reader.get_beam_center().value();
+        auto pixel_size = reader.get_pixel_size().value();
+        double distance = reader.get_detector_distance().value()*1000.0;
+        
+        panel_data["distance"] = distance;
+        //double thickness = reader.get_detector_sensor_thickness().value()*1000.0;
+        int height = reader.image_shape()[0];
+        int width = reader.image_shape()[1];
+        std::array<double, 2> beam_center_array = {
+            static_cast<double>(beam_center[1]),
+            static_cast<double>(beam_center[0])
+        };
+        std::array<double, 2> pixel_size_array = {
+            static_cast<double>(pixel_size[0]) * 1000.0,
+            static_cast<double>(pixel_size[1]) * 1000.0
+        };
+        panel_data["beam_center"] = beam_center_array;
+        panel_data["pixel_size"] = pixel_size_array;
+        // Need to extract these
+        //std::string fast_axis = "x";
+        //std::string slow_axis = "-y";
+        panel_data["fast_axis"] = std::vector<double>{1.0,0.0,0.0};
+        panel_data["slow_axis"] = std::vector<double>{0.0,-1.0,0.0};
+        std::array<int, 2> image_size = {width, height};
+        panel_data["image_size"] = image_size;
+        panel_data["trusted_range"] = std::array<double, 2>{0.0, 65536.0};
+        panel_data["type"] = "SENSOR_PAD";
+        panel_data["name"] = "module";
+        panel_data["raw_image_offset"] = std::array<int, 2>{0,0};
+        panel_data["gain"] = 1.0;
+        panel_data["pedestal"] = 0.0;
+        panel_data["px_mm_strategy"] = {{"type", "ParallaxCorrectedPxMmStrategy"}};
+        std::vector<json> panels_array = {panel_data};
+        detector_data["panels"] = panels_array;
+        logger.info("Constructing detector model from reader");
+    }
+
+    
+    /*Panel panel(distance, beam_center_array, 
         pixel_size_array, image_size,
         fast_axis, slow_axis, thickness, mu);
-    std::vector<Panel> panels = {panel};
-    Detector detector(panels);
+    std::vector<Panel> panels = {panel};*/
+    Detector detector(detector_data);
     expt.set_detector(detector);
+
+#pragma endregion
 
     json elist_out = expt.to_json();
     std::string efile_name = "imported.expt";
