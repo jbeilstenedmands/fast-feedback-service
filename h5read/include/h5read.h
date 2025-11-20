@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
+#include <stdbool.h>
 #ifdef __cplusplus
 #include <cassert>
 #include <mutex>
@@ -61,10 +61,15 @@ float h5read_get_pixel_size_fast(h5read_handle *obj);
 /// Get the oscillation for this dataset
 float h5read_get_oscillation_start(h5read_handle *obj);
 float h5read_get_oscillation_width(h5read_handle *obj);
+char* h5read_get_detector_material(h5read_handle *obj);
 float h5read_get_detector_distance(h5read_handle *obj);
 float h5read_get_detector_sensor_thickness(h5read_handle *obj);
 float h5read_get_beam_center_x(h5read_handle *obj);
 float h5read_get_beam_center_y(h5read_handle *obj);
+double* h5read_get_detector_fast_axis(h5read_handle *obj);
+double* h5read_get_detector_slow_axis(h5read_handle *obj);
+bool h5read_is_slow_axis_valid(h5read_handle *obj);
+bool h5read_is_fast_axis_valid(h5read_handle *obj);
 
 /** Borrow a pointer to the image mask.
  *
@@ -177,8 +182,12 @@ class Reader {
       const = 0;  ///< Distance to detector, in meters.
     virtual std::optional<float> get_detector_sensor_thickness()
       const = 0;  ///< Sensor thickness, in meters.
+    virtual std::optional<std::string> get_detector_material()
+      const = 0;  ///< Sensor thickness, in meters.
     virtual std::array<float, 2> get_oscillation()
       const = 0;  ///< Oscillation (start, width), in degrees
+    virtual std::optional<std::array<double, 3>> get_detector_fast_axis() const = 0;
+    virtual std::optional<std::array<double, 3>> get_detector_slow_axis() const = 0;
 };
 
 // Declare a C++ "object" version so we don't have to keep track of allocations
@@ -294,6 +303,29 @@ class H5Read : public Reader {
     }
     virtual std::optional<float> get_detector_sensor_thickness() const {
         return {h5read_get_detector_sensor_thickness(_handle.get())};
+    }
+    virtual std::optional<std::array<double, 3>> get_detector_fast_axis() const {
+        if (!h5read_is_fast_axis_valid(_handle.get())){
+            return std::nullopt; // No value
+        }
+        double* axis = h5read_get_detector_fast_axis(_handle.get());
+        // Convert from NXMX to DXTBX coordinate conventions (reverse x and z)
+        return std::array<double, 3>{-1.0*axis[0], axis[1], -1.0*axis[2]};
+    }
+    virtual std::optional<std::array<double, 3>> get_detector_slow_axis() const {
+        if (!h5read_is_slow_axis_valid(_handle.get())){
+            return std::nullopt; // No value
+        }
+        double* axis = h5read_get_detector_slow_axis(_handle.get());
+        // Convert from NXMX to DXTBX coordinate conventions (reverse x and z)
+        return std::array<double, 3>{-1.0*axis[0], axis[1], -1.0*axis[2]};
+    }
+    virtual std::optional<std::string> get_detector_material() const {
+        const char* raw = h5read_get_detector_material(_handle.get());
+        if (raw == nullptr) {
+            return std::nullopt; // No value
+        }
+        return std::string(raw); // Convert char* to std::string
     }
     std::mutex mutex;
 

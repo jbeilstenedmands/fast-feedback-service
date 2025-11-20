@@ -158,8 +158,17 @@ class CBFRead : public Reader {
     virtual std::optional<float> get_detector_sensor_thickness() const {
         return std::nullopt;
     };
+    virtual std::optional<std::string> get_detector_material() const {
+        return std::nullopt;
+    };
     virtual std::array<float, 2> get_oscillation() const {
         return {0, 0};
+    };
+    virtual std::optional<std::array<double, 3>> get_detector_fast_axis() const {
+        return std::nullopt;
+    };
+    virtual std::optional<std::array<double, 3>> get_detector_slow_axis() const {
+        return std::nullopt;
     };
 };
 

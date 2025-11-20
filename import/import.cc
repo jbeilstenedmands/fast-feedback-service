@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <format>
 #include <sstream>
+#include <iostream>
 
 
 #pragma region Argument Parser
@@ -457,11 +458,19 @@ int main(int argc, char **argv) {
         panel_data["gain"] = 1.0;
         panel_data["pedestal"] = 0.0;
         panel_data["px_mm_strategy"] = {{"type", "ParallaxCorrectedPxMmStrategy"}};
-        std::string material = "Si";
+        std::optional<std::string> material_read = reader.get_detector_material();
+        std::string material = "Si"; // Default.
+        // FIXME make explicit we only support Si and CdTe?
+        if (material_read.has_value()){
+            if (material_read.value() == "Silicon"){ // Convert to atomic element symbol.
+                material = "Si";
+            } else {
+                material = material_read.value();
+            }
+        }
 
         // Get as much as possible from the reader.
         // Assuming single panel.
-        // FIXME - need to extract sensor material and set it on the detector.
 
         panel_data["mu"] = calculate_mu_for_material_at_wavelength(material, wavelength);
         panel_data["thickness"] = reader.get_detector_sensor_thickness().value()*1000.0;
@@ -484,11 +493,27 @@ int main(int argc, char **argv) {
         panel_data["pixel_size"] = pixel_size_array;
         panel_data["image_size"] = image_size;
         
-        // FIXME Need to extract : fast_axis, slow_axis, trusted_range, material.
+        // defaults
+        std::array<double, 3> fast_axis = {1.0, 0.0, 0.0};
+        std::array<double, 3> slow_axis = {0.0, -1.0, 0.0};
+        // extract
+        std::optional<std::array<double, 3>> fast = reader.get_detector_fast_axis();
+        std::optional<std::array<double, 3>> slow = reader.get_detector_slow_axis();
+        if (fast.has_value()){
+            fast_axis = fast.value();
+        }
+        if (slow.has_value()){
+            slow_axis = slow.value();
+        }
+        panel_data["fast_axis"] = fast_axis;
+        panel_data["slow_axis"] = slow_axis;
+
+        panel_data["trusted_range"] = std::vector<double>{
+            static_cast<double>(reader.get_trusted_range()[0]),
+            static_cast<double>(reader.get_trusted_range()[1])
+        };
+
         // would be good to extract these type, name, raw_image_offset, gain, pedestal
-        panel_data["fast_axis"] = std::vector<double>{1.0,0.0,0.0};
-        panel_data["slow_axis"] = std::vector<double>{0.0,-1.0,0.0};
-        panel_data["trusted_range"] = std::array<double, 2>{0.0, 65536.0};
         
         
         logger.info("Constructing detector model from reader");

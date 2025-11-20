@@ -50,9 +50,14 @@ struct _h5read_handle {
     float pixel_size_x, pixel_size_y;
     float detector_distance;
     float detector_sensor_thickness;
+    char *detector_material;
     float beam_center_x, beam_center_y;
     float oscillation_start;
     float oscillation_width;
+    double fast_axis[3];
+    double slow_axis[3];
+    bool fast_axis_valid;
+    bool slow_axis_valid;
 };
 
 /// Validate that the HDF5 datatype size matches the expected pixel data size
@@ -90,6 +95,7 @@ void h5read_free(h5read_handle *obj) {
     if (obj->data_files) free(obj->data_files);
     free(obj->mask);
     free(obj->module_mask);
+    if (obj->detector_material) free(obj->detector_material);
 
     free(obj);
 }
@@ -437,6 +443,15 @@ float h5read_get_detector_distance(h5read_handle *obj) {
 float h5read_get_detector_sensor_thickness(h5read_handle *obj) {
     return obj->detector_sensor_thickness;
 }
+double* h5read_get_detector_fast_axis(h5read_handle *obj){
+    return obj->fast_axis;
+}
+double* h5read_get_detector_slow_axis(h5read_handle *obj){
+    return obj->slow_axis;
+}
+char* h5read_get_detector_material(h5read_handle *obj) {
+    return obj->detector_material;
+}
 float h5read_get_beam_center_x(h5read_handle *obj) {
     return obj->beam_center_x;
 }
@@ -448,6 +463,12 @@ float h5read_get_oscillation_start(h5read_handle *obj) {
 }
 float h5read_get_oscillation_width(h5read_handle *obj) {
     return obj->oscillation_width;
+}
+bool h5read_is_fast_axis_valid(h5read_handle *obj){
+    return obj->fast_axis_valid;
+}
+bool h5read_is_slow_axis_valid(h5read_handle *obj){
+    return obj->slow_axis_valid;
 }
 
 #ifdef HAVE_HDF5
@@ -685,6 +706,120 @@ herr_t _read_single_value_float(hid_t origin, const char *path, float *destinati
     return 0;
 }
 
+/// Read a single string value out of an HDF5 dataset
+///
+/// If the dataset is present but contains multiple elements, sets destination
+/// to NULL. If an unknown error occurs, terminates the program.
+///
+/// @param      origin          The root file or group to read the path from
+/// @param      path            The path from the origin to open
+/// @param[out] destination     Pointer to char* where the string will be stored
+///
+/// @return HDF error (negative) if opening the dataset failed. Otherwise, 0.
+herr_t _read_single_value_string(hid_t origin, const char *path, char **destination) {
+    hid_t dataset = H5Dopen(origin, path, H5P_DEFAULT);
+    if (dataset < 0) {
+        return dataset; // Failed to open dataset
+    }
+
+    hid_t datatype = H5Dget_type(dataset);
+    hid_t dataspace = H5Dget_space(dataset);
+    size_t num_elements = H5Sget_simple_extent_npoints(dataspace);
+
+    if (num_elements > 1) {
+        char name[256] = "\0";
+        H5Iget_name(origin, name, sizeof(name));
+        fprintf(stderr, "Error: While reading %s/%s: More than one element.\n", name, path);
+        *destination = NULL;
+    } else if (!H5Tis_variable_str(datatype)) {
+        // Handle fixed-length strings
+        size_t size = H5Tget_size(datatype);
+        *destination = (char *)malloc(size + 1);
+        if (H5Dread(dataset, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, *destination) < 0) {
+            fprintf(stderr, "Error: Failed to read fixed-length string.\n");
+            exit(1);
+        }
+        (*destination)[size] = '\0'; // Null-terminate
+    } else {
+        // Handle variable-length strings
+        char *temp = NULL;
+        if (H5Dread(dataset, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, &temp) < 0) {
+            fprintf(stderr, "Error: Failed to read variable-length string.\n");
+            exit(1);
+        }
+        *destination = strdup(temp); // Copy to user buffer
+        H5free_memory(temp);         // Free HDF5-allocated memory
+    }
+
+    H5Tclose(datatype);
+    H5Sclose(dataspace);
+    H5Dclose(dataset);
+    return 0;
+}
+
+/// Read an attribute that is a 64-bit float array of size 3
+///
+/// @param obj_id      The HDF5 object (group or dataset) that has the attribute
+/// @param attr_name   The name of the attribute
+/// @param destination Pointer to an array of 3 doubles
+///
+/// @return HDF error (negative) if opening the attribute failed, otherwise 0
+herr_t _read_double_array_attribute(hid_t obj_id, const char *attr_name, double destination[3]) {
+    hid_t attr_id = H5Aopen(obj_id, attr_name, H5P_DEFAULT);
+    if (attr_id < 0) {
+        return attr_id; // Attribute not found
+    }
+
+    // Check dataspace size
+    hid_t space_id = H5Aget_space(attr_id);
+    hsize_t dims[1];
+    int ndims = H5Sget_simple_extent_dims(space_id, dims, NULL);
+    if (ndims != 1 || dims[0] != 3) {
+        fprintf(stderr, "Error: Attribute %s is not an array of size 3\n", attr_name);
+        H5Sclose(space_id);
+        H5Aclose(attr_id);
+        return -1;
+    }
+
+    // Read the attribute as double
+    if (H5Aread(attr_id, H5T_NATIVE_DOUBLE, destination) < 0) {
+        fprintf(stderr, "Error: Failed to read attribute %s\n", attr_name);
+        H5Sclose(space_id);
+        H5Aclose(attr_id);
+        return -1;
+    }
+
+    H5Sclose(space_id);
+    H5Aclose(attr_id);
+    return 0;
+}
+
+void read_fast_axis(h5read_handle *obj){
+    char fast_axis_path[] = "/entry/instrument/detector/module/fast_pixel_direction";
+    //double fast_axis[3];
+    hid_t fast_axis_dataset = H5Dopen(obj->master_file, fast_axis_path, H5P_DEFAULT);
+    if (_read_double_array_attribute(fast_axis_dataset, "vector", obj->fast_axis) < 0){
+        fprintf(stderr, "Warning: No fast axis vector found\n");
+        obj->fast_axis_valid=false;
+    }
+    else {
+        obj->fast_axis_valid=true;
+    }
+}
+
+void read_slow_axis(h5read_handle *obj){
+    char slow_axis_path[] = "/entry/instrument/detector/module/slow_pixel_direction";
+    //double slow_axis[3];
+    hid_t slow_axis_dataset = H5Dopen(obj->master_file, slow_axis_path, H5P_DEFAULT);
+    if (_read_double_array_attribute(slow_axis_dataset, "vector", obj->slow_axis) < 0){
+        fprintf(stderr, "Warning: No fast axis vector found\n");
+        obj->slow_axis_valid=true;
+    }
+    else {
+        obj->slow_axis_valid=true;
+    }
+}
+
 void read_trusted_range(h5read_handle *obj) {
     obj->trusted_range_min = 0;
 #ifdef PIXEL_DATA_32BIT
@@ -796,6 +931,13 @@ void read_detector_metadata(h5read_handle *obj) {
         < 0) {
         fprintf(stderr, "Warning: No detector sensor thickness found\n");
         obj->detector_sensor_thickness = -1;
+    }
+    if (_read_single_value_string(obj->master_file,
+                                 "/entry/instrument/detector/sensor_material",
+                                 &obj->detector_material)
+        < 0) {
+        fprintf(stderr, "Warning: No detector sensor thickness found\n");
+        obj->detector_material = NULL;
     }
 
     if (obj->pixel_size_x > 0) {
