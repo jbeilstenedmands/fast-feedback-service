@@ -102,6 +102,55 @@ class ImportArgumentParser : public argparse::ArgumentParser {
                 .nargs(argparse::nargs_pattern::at_least_one);
             add_argument("--scan-axis", "--goniometer.multi.scan-axis") // defaults to 0
                 .scan<'u', uint32_t>();
+            // Detector options.
+            add_argument("--detector.distance", "--distance")
+                .help("The distance from the crystal to the detector")
+                .scan<'g', double>();
+            add_argument("--detector.beam-center-fast-slow", "--detector.beam-center", "--beam-center")
+                .nargs(2)
+                .help("The coordinates in pixels of the beam center, in fast-slow order.")
+                .scan<'g', double>();
+            add_argument("--detector.fast-axis", "--fast-axis")
+                .help("The direction of the fast axis, as a vector.")
+                .nargs(3)
+                .scan<'g', double>();
+            add_argument("--detector.slow-axis", "--slow-axis")
+                .help("The direction of the slow axis, as a vector.")
+                .nargs(3)
+                .scan<'g', double>();
+            add_argument("--detector.pixel-size")
+                .help("The sizes of the pixels in x and y in mm")
+                .nargs(2)
+                .scan<'g', double>();
+            add_argument("--detector.image-size")
+                .help("The size of the image in fast-slow directions in pixels")
+                .nargs(2)
+                .scan<'i', int>();
+            add_argument("--detector.trusted-range")
+                .help("The lowest and highest trusted values of pixel intensity.")
+                .nargs(2)
+                .scan<'g', double>();
+            add_argument("--detector.type")
+                .help("The panel type (e.g. SENSOR_PAD)");
+            add_argument("--detector.name")
+                .help("The detector name");
+            add_argument("--detector.thickness")
+                .help("The thickness of the detectot sensor in mm")
+                .scan<'g', double>();
+            add_argument("--detector.material")
+                .help("The detector material, as an atomic element (e.g Si)");
+            add_argument("--detector.gain")
+                .help("The gain of the detector")
+                .default_value(1.0)
+                .scan<'g', double>();
+            add_argument("--detector.pedestal")
+                .help("The pedestal correction applied to the detector")
+                .default_value(0.0)
+                .scan<'g', double>();
+            add_argument("--detector.raw-image-offset")
+                .help("The raw image offset")
+                .nargs(2)
+                .scan<'i', int>();
         }
 };
 
@@ -280,7 +329,7 @@ int main(int argc, char **argv) {
 #pragma region Goniometer
 
     Goniometer goniometer;
-    json goniometer_data;
+    json goniometer_data = expt.goniometer().to_json(); // Start with a default model (FIXME can remove this one reader options added.)
     // If we have a reference geometry, use this to create a goniometer data json, else load as
     // much as we can from the reader.
     // These are then updated later with any custom options.
@@ -313,9 +362,8 @@ int main(int argc, char **argv) {
         // FIXME else get from reader?
         goniometer_data["fixed_rotation"] = fixed_rotation;
         
-        goniometer = Goniometer(goniometer_data);
-        expt.set_goniometer(goniometer);
-        logger.info("Created a single-axis goniometer model with rotation axis ({:.3f}, {:.3f}, {:.3f})", axis[0], axis[1], axis[2]);
+        
+        logger.info("Creating a single-axis goniometer model with rotation axis ({:.3f}, {:.3f}, {:.3f})", axis[0], axis[1], axis[2]);
     }
     else if (parser.is_used("goniometer.multi.axes")){
         if (goniometer_data.contains("axis")){
@@ -373,17 +421,17 @@ int main(int argc, char **argv) {
         }
         goniometer = Goniometer(goniometer_data);
         expt.set_goniometer(goniometer);
-        logger.info("Created a multi-axis goniometer model");
+        logger.info("Creaing a multi-axis goniometer model");
     }
-    else {
+    else if (!use_reference_goniometer) {
         logger.info("Defaulting to single-axis goniometer with rotation axis (1,0,0)");
         // Don't need to set anything as will use the default gonio model.
     }
+    goniometer = Goniometer(goniometer_data);
+    expt.set_goniometer(goniometer);
 
 #pragma endregion
 
-    // FIXME detector
-    // The simplest way to configure a detector is with distance and beam centre, then assuming
 
 #pragma region Detector
     json panel_data;
@@ -396,26 +444,34 @@ int main(int argc, char **argv) {
         if (detector_data["panels"].size() > 1){
             throw std::invalid_argument("The reference detector is multi-panel, only single panel detectors are currently supported.");
         }
+        panel_data = detector_data["panels"][0];
+        panel_data["distance"] = reference_expt.detector().panels()[0].get_directed_distance();
+        // FIXME how to get beam center and then remove origin.
         logger.info("Constructing detector model from reference experiment.");
     }
     else {
-        // Get from the reader.
+        // Add some sensible defaults (to be overwritten if present in the reader).
+        panel_data["type"] = "SENSOR_PAD";
+        panel_data["name"] = "module";
+        panel_data["raw_image_offset"] = std::array<int, 2>{0,0};
+        panel_data["gain"] = 1.0;
+        panel_data["pedestal"] = 0.0;
+        panel_data["px_mm_strategy"] = {{"type", "ParallaxCorrectedPxMmStrategy"}};
+        std::string material = "Si";
+
+        // Get as much as possible from the reader.
         // Assuming single panel.
         // FIXME - need to extract sensor material and set it on the detector.
-        std::string material = "Si";
-        double mu = calculate_mu_for_material_at_wavelength(material, beam_data["wavelength"]);
-        panel_data["mu"] = mu;
-        double thickness = reader.get_detector_sensor_thickness().value()*1000.0;
-        panel_data["thickness"] = thickness;
 
+        panel_data["mu"] = calculate_mu_for_material_at_wavelength(material, wavelength);
+        panel_data["thickness"] = reader.get_detector_sensor_thickness().value()*1000.0;
+        panel_data["distance"] = reader.get_detector_distance().value()*1000.0;;
+        
         auto beam_center = reader.get_beam_center().value();
         auto pixel_size = reader.get_pixel_size().value();
-        double distance = reader.get_detector_distance().value()*1000.0;
-        
-        panel_data["distance"] = distance;
-        //double thickness = reader.get_detector_sensor_thickness().value()*1000.0;
         int height = reader.image_shape()[0];
         int width = reader.image_shape()[1];
+        std::array<int, 2> image_size = {width, height};
         std::array<double, 2> beam_center_array = {
             static_cast<double>(beam_center[1]),
             static_cast<double>(beam_center[0])
@@ -426,30 +482,64 @@ int main(int argc, char **argv) {
         };
         panel_data["beam_center"] = beam_center_array;
         panel_data["pixel_size"] = pixel_size_array;
-        // Need to extract these
-        //std::string fast_axis = "x";
-        //std::string slow_axis = "-y";
+        panel_data["image_size"] = image_size;
+        
+        // FIXME Need to extract : fast_axis, slow_axis, trusted_range, material.
+        // would be good to extract these type, name, raw_image_offset, gain, pedestal
         panel_data["fast_axis"] = std::vector<double>{1.0,0.0,0.0};
         panel_data["slow_axis"] = std::vector<double>{0.0,-1.0,0.0};
-        std::array<int, 2> image_size = {width, height};
-        panel_data["image_size"] = image_size;
         panel_data["trusted_range"] = std::array<double, 2>{0.0, 65536.0};
-        panel_data["type"] = "SENSOR_PAD";
-        panel_data["name"] = "module";
-        panel_data["raw_image_offset"] = std::array<int, 2>{0,0};
-        panel_data["gain"] = 1.0;
-        panel_data["pedestal"] = 0.0;
-        panel_data["px_mm_strategy"] = {{"type", "ParallaxCorrectedPxMmStrategy"}};
-        std::vector<json> panels_array = {panel_data};
-        detector_data["panels"] = panels_array;
+        
+        
         logger.info("Constructing detector model from reader");
     }
+    // Now overwrite with any user set options.
+    if (parser.is_used("detector.distance")){
+        panel_data["distance"] = parser.get<double>("detector.distance");
+    }
+    if (parser.is_used("detector.beam-center-fast-slow")){
+        panel_data["beam_center"] = parser.get<std::vector<double>>("detector.beam-center-fast-slow");
+    }
+    if (parser.is_used("detector.fast-axis")){
+        panel_data["fast_axis"] = parser.get<std::vector<double>>("detector.fast-axis");
+    }
+    if (parser.is_used("detector.slow-axis")){
+        panel_data["slow_axis"] = parser.get<std::vector<double>>("detector.slow-axis");
+    }
+    if (parser.is_used("detector.pixel-size")){
+        panel_data["pixel_size"] = parser.get<std::vector<double>>("detector.pixel-size");
+    }
+    if (parser.is_used("detector.image-size")){
+        panel_data["image_size"] = parser.get<std::vector<int>>("detector.image-size");
+    }
+    if (parser.is_used("detector.trusted-range")){
+        panel_data["trusted_range"] = parser.get<std::vector<double>>("detector.trusted-range");
+    }
+    if (parser.is_used("detector.type")){
+        panel_data["type"] = parser.get<std::string>("detector.type");
+    }
+    if (parser.is_used("detector.name")){
+        panel_data["name"] = parser.get<std::string>("detector.name");
+    }
+    if (parser.is_used("detector.material")){
+        panel_data["material"] = parser.get<std::string>("detector.material");
+    }
+    if (parser.is_used("detector.thickness")){
+        panel_data["thickness"] = parser.get<double>("detector.thickness");
+    }
+    if (parser.is_used("detector.gain")){
+        panel_data["gain"] = parser.get<double>("detector.gain");
+    }
+    if (parser.is_used("detector.pedestal")){
+        panel_data["pedestal"] = parser.get<double>("detector.pedestal");
+    }
+    if (parser.is_used("detector.raw-image-offset")){
+        panel_data["raw_image_offset"] = parser.get<std::vector<int>>("detector.raw-image-offset");
+    }
 
-    
-    /*Panel panel(distance, beam_center_array, 
-        pixel_size_array, image_size,
-        fast_axis, slow_axis, thickness, mu);
-    std::vector<Panel> panels = {panel};*/
+
+    std::vector<json> panels_array = {panel_data};
+    detector_data["panels"] = panels_array;
     Detector detector(detector_data);
     expt.set_detector(detector);
 
