@@ -9,10 +9,10 @@ endif()
 FetchContent_MakeAvailable(Eigen3)
 
 # add_subdirectory(tests)
-add_executable(import
+add_executable(importer
     import.cc
 )
-target_link_libraries(import
+target_link_libraries(importer
     PRIVATE
     fmt
     dx2
