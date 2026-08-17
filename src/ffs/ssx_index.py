@@ -29,6 +29,7 @@ class IndexedLatticeResult(BaseModel):
     xyzcal_px: list[float] | None = None
     s1: list[float] | None = None
     delpsi: list[float] | None = None
+    spot_covariances: list[float] | None = None
     rmsds: list[float] | None = None
 
 
@@ -84,7 +85,7 @@ class GPUIndexer:
     def s0(self):
         return self._s0
 
-    def index(self, xyzobs_px: np.array) -> IndexingResult:
+    def index(self, xyzobs_px: np.array, spot_covariances: np.array) -> IndexingResult:
         n_initial = int(xyzobs_px.size / 3)
         if xyzobs_px.size < (self.min_spots * 3):
             indexing_result = IndexingResult(
@@ -134,7 +135,7 @@ class GPUIndexer:
                 cells = np.concatenate((cells, real_a, real_b, real_c), axis=None)
 
             ssx_index_result = ffs.index.index_from_ssx_cells(
-                cells, rlp_, xyzobs_px, self.s0, self.panel
+                cells, rlp_, xyzobs_px, self.s0, self.panel, spot_covariances,
             )
             n_indexed = len(ssx_index_result.delpsi)
 
@@ -151,6 +152,7 @@ class GPUIndexer:
                         xyzcal_px=ssx_index_result.xyzcal_px,
                         s1=ssx_index_result.s1,
                         delpsi=ssx_index_result.delpsi,
+                        spot_covariances=ssx_index_result.spot_covariances,
                         rmsds=ssx_index_result.rmsds,
                     )
                 ],
@@ -171,6 +173,7 @@ class OutputAggregator:
         self.xyzobs_output = []
         self.xyzcal_px_output = []
         self.delpsical_output = []
+        self.spot_covariances = []
         self.ids_output = []
         self.s1_output = []
         self.image_nos_output = []
@@ -197,6 +200,7 @@ class OutputAggregator:
         midx = np.array(lattice.miller_indices, dtype=int).reshape(-1, 3)
         xyzobs = np.array(lattice.xyzobs_px).reshape(-1, 3)
         xyzcal = np.array(lattice.xyzcal_px).reshape(-1, 3)
+        covariances = np.array(lattice.spot_covariances).reshape(-1, 3)
         s1_reshape = np.array(lattice.s1).reshape(-1, 3)
         delpsi = np.array(lattice.delpsi)
         rmsdx, rmsdy, rmsd_psi = lattice.rmsds
@@ -208,6 +212,7 @@ class OutputAggregator:
         self.xyzobs_output.append(xyzobs)
         self.xyzcal_px_output.append(xyzcal)
         self.delpsical_output.append(np.array(delpsi))
+        self.spot_covariances.append(covariances)
         self.s1_output.append(s1_reshape)
         self.ids_output.append(np.full(n, self.output_id, dtype=np.int32))
         self.image_nos_output.append(np.full(n, i, dtype=np.int32))
@@ -222,6 +227,7 @@ class OutputAggregator:
             group["image"] = np.concatenate(self.image_nos_output)
             group["xyzobs.px.value"] = np.concatenate(self.xyzobs_output)
             group["xyzcal.px"] = np.concatenate(self.xyzcal_px_output)
+            group["spot_covariances"] = np.concatenate(self.spot_covariances)
             group["s1"] = np.concatenate(self.s1_output)
             group["delpsical.rad"] = np.concatenate(self.delpsical_output)
             group["miller_index"] = np.concatenate(
@@ -300,6 +306,7 @@ def run(args=None):
         with h5py.File(parsed.reflections, "r") as refls:
             processing_group = refls["dials"]["processing"]["group_0"]
             xyzs = processing_group["xyzobs.px.value"][:]
+            spot_covariances = processing_group["spot_covariance"][:]
             ids = processing_group["id"][:]
             experiment_ids = processing_group.attrs["experiment_ids"]
             identifiers = processing_group.attrs["identifiers"]
@@ -338,8 +345,9 @@ def run(args=None):
     end_indices = np.append(start_indices[1:], len(ids))
     for id_, start, end in zip(unique_ids, start_indices, end_indices):
         xyzs_this = xyzs[start:end]
+        spot_cov_this = spot_covariances[start:end]
         if xyzs_this.any():
-            tables.append(xyzs_this)
+            tables.append((xyzs_this, spot_cov_this))
             id_values.append(id_)
 
     ## Initialise the GPU indexer.
@@ -369,12 +377,14 @@ def run(args=None):
     t1 = time.time()
 
     for t, i in zip(tables, id_values):
-        data = t.flatten()
-        if t.shape[0] < min_spots:
+        data = t[0]
+        spot_covariances = t[1]
+        if data.shape[0] < min_spots:
             continue
         n_considered += 1
-        data = t.flatten()
-        result = indexer.index(data)
+        data = data.flatten()
+        spot_covariances = spot_covariances.flatten()
+        result = indexer.index(data, spot_covariances)
         if result.lattices:
             n_indexed_images += 1
             lattice = result.lattices[0]

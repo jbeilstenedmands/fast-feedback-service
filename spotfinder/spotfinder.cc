@@ -681,6 +681,14 @@ int main(int argc, char **argv) {
     }
 #pragma endregion Resolution Filtering
 
+    std::array<int, 2> image_size = {static_cast<int>(width),
+                                         static_cast<int>(height)};
+    Panel panel(detector.distance * 1000,
+                {detector.beam_center_x, detector.beam_center_y},
+                {detector.pixel_size_x * 1000, detector.pixel_size_y * 1000},
+                image_size);
+    Vector3d s0 = {0.0, 0.0, -1.0 / wavelength};
+
     auto all_images_start_time = std::chrono::high_resolution_clock::now();
 
     auto next_image = std::atomic<int>(0);
@@ -706,6 +714,9 @@ int main(int argc, char **argv) {
     std::unique_ptr<std::map<int, std::vector<float>>> reflection_centers_2d = nullptr;
     std::mutex
       reflection_centers_2d_mutex;  // Mutex to protect the reflection centers 2d map
+    std::unique_ptr<std::map<int, std::vector<double>>> reflection_covariances_2d = nullptr;
+    std::mutex
+      reflection_covariances_2d_mutex;  // Mutex to protect the reflection covariances map
 
     if (oscillation_width > 0) {
         // If oscillation information is available then this is a rotation dataset
@@ -718,6 +729,8 @@ int main(int argc, char **argv) {
             // A map we will use to save results as we go.
             reflection_centers_2d =
               std::make_unique<std::map<int, std::vector<float>>>();
+            reflection_covariances_2d =
+              std::make_unique<std::map<int, std::vector<double>>>();
         }
     }
 
@@ -909,6 +922,7 @@ int main(int argc, char **argv) {
                   connected_components_2d->get_num_strong_pixels_filtered();
 
                 std::vector<float> centers_of_mass;
+                std::vector<double> spot_covariances;
                 // If this is a rotation dataset, store the connected component slice
                 if (oscillation_width) {
                     // Lock the mutex to protect the map
@@ -925,10 +939,18 @@ int main(int argc, char **argv) {
                         centers_of_mass.push_back(x);
                         centers_of_mass.push_back(y);
                         centers_of_mass.push_back(z);
+                        auto [xmm, ymm] = panel.px_to_mm(x, y);
+                        Vector3d s1 = panel.get_lab_coord(xmm, ymm);
+                        auto [varx, vary, varxy] = r.covariance_2D(s1, s0, panel);
+                        spot_covariances.push_back(varx);
+                        spot_covariances.push_back(vary);
+                        spot_covariances.push_back(varxy);
                     }
                     if (save_to_h5) {
                         std::lock_guard<std::mutex> lock(reflection_centers_2d_mutex);
                         (*reflection_centers_2d)[offset_image_num] = centers_of_mass;
+                        std::lock_guard<std::mutex> lock2(reflection_covariances_2d_mutex);
+                        (*reflection_covariances_2d)[offset_image_num] = spot_covariances;
                     }
                 }
 
@@ -1002,6 +1024,7 @@ int main(int argc, char **argv) {
                                       {"n_spots_total", boxes.size()}};
                     if (output_for_index) {
                         json_data["spot_centers"] = centers_of_mass;
+                        json_data["spot_covariances"] = spot_covariances;
                     }
                     // Send the JSON data through the pipe
                     pipeHandler->sendData(json_data);
@@ -1154,13 +1177,7 @@ int main(int argc, char **argv) {
         // integration without needing to reload data.
         // Key new metadata needed
         //  - rotation axis (default +x?)
-        std::array<int, 2> image_size = {static_cast<int>(width),
-                                         static_cast<int>(height)};
-        Panel panel(detector.distance * 1000,
-                    {detector.beam_center_x, detector.beam_center_y},
-                    {detector.pixel_size_x * 1000, detector.pixel_size_y * 1000},
-                    image_size);
-        Vector3d s0 = {0.0, 0.0, -1.0 / wavelength};
+
         Scan scan({1, static_cast<int>(num_images)},
                   {oscillation_start, oscillation_width});
         int image_range_0 = scan.get_image_range()[0];
@@ -1171,6 +1188,7 @@ int main(int argc, char **argv) {
         // Data vectors for output.
         std::vector<double> sigma_b_variances;
         std::vector<double> sigma_m_variances;
+        std::vector<double> spot_covariances;
         std::vector<int> bbox_depths;
         sigma_b_variances.reserve(reflections_3d.size());
         sigma_m_variances.reserve(reflections_3d.size());
@@ -1262,6 +1280,7 @@ int main(int argc, char **argv) {
 
         try {
             std::vector<double> flat_coms;
+            std::vector<double> flat_covariances;
             std::vector<int> ids;
             std::vector<int> centers_map_keys;
             for (const auto &pair : *reflection_centers_2d) {
@@ -1274,6 +1293,10 @@ int main(int argc, char **argv) {
                 int n_refls = flat_coms_this.size() / 3;
                 for (auto com : flat_coms_this) {
                     flat_coms.push_back(static_cast<double>(com));
+                }
+                std::vector<double> flat_covariances_this = (*reflection_covariances_2d)[imageno];
+                for (auto cov : flat_covariances_this) {
+                    flat_covariances.push_back(cov);
                 }
                 for (int i = 0; i < n_refls; ++i) {
                     ids.push_back(id);
@@ -1289,6 +1312,7 @@ int main(int argc, char **argv) {
             }
             // Add the reflection centroids to the table
             table.add_column("xyzobs.px.value", flat_coms.size() / 3, 3, flat_coms);
+            table.add_column("spot_covariance", flat_covariances.size() / 3, 3, flat_covariances);
             // Map each reflection to the generated experiment ID
             table.add_column("id", ids.size(), 1, ids);
 
