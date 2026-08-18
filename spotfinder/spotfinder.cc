@@ -717,6 +717,9 @@ int main(int argc, char **argv) {
     std::unique_ptr<std::map<int, std::vector<double>>> reflection_covariances_2d = nullptr;
     std::mutex
       reflection_covariances_2d_mutex;  // Mutex to protect the reflection covariances map
+    std::unique_ptr<std::map<int, std::vector<int>>> reflection_intensities_mapptr = nullptr;
+    std::mutex
+      reflection_intensities_mutex;  // Mutex to protect the reflection intensities map
 
     if (oscillation_width > 0) {
         // If oscillation information is available then this is a rotation dataset
@@ -731,6 +734,8 @@ int main(int argc, char **argv) {
               std::make_unique<std::map<int, std::vector<float>>>();
             reflection_covariances_2d =
               std::make_unique<std::map<int, std::vector<double>>>();
+            reflection_intensities_mapptr =
+              std::make_unique<std::map<int, std::vector<int>>>();
         }
     }
 
@@ -923,6 +928,7 @@ int main(int argc, char **argv) {
 
                 std::vector<float> centers_of_mass;
                 std::vector<double> spot_covariances;
+                std::vector<int> spot_intensities;
                 // If this is a rotation dataset, store the connected component slice
                 if (oscillation_width) {
                     // Lock the mutex to protect the map
@@ -945,12 +951,15 @@ int main(int argc, char **argv) {
                         spot_covariances.push_back(varx);
                         spot_covariances.push_back(vary);
                         spot_covariances.push_back(varxy);
+                        spot_intensities.push_back(r.total_intensity());
                     }
                     if (save_to_h5) {
                         std::lock_guard<std::mutex> lock(reflection_centers_2d_mutex);
                         (*reflection_centers_2d)[offset_image_num] = centers_of_mass;
                         std::lock_guard<std::mutex> lock2(reflection_covariances_2d_mutex);
                         (*reflection_covariances_2d)[offset_image_num] = spot_covariances;
+                        std::lock_guard<std::mutex> lock3(reflection_intensities_mutex);
+                        (*reflection_intensities_mapptr)[offset_image_num] = spot_intensities;
                     }
                 }
 
@@ -1025,6 +1034,7 @@ int main(int argc, char **argv) {
                     if (output_for_index) {
                         json_data["spot_centers"] = centers_of_mass;
                         json_data["spot_covariances"] = spot_covariances;
+                        json_data["spot_intensities"] = spot_intensities;
                     }
                     // Send the JSON data through the pipe
                     pipeHandler->sendData(json_data);
@@ -1188,7 +1198,6 @@ int main(int argc, char **argv) {
         // Data vectors for output.
         std::vector<double> sigma_b_variances;
         std::vector<double> sigma_m_variances;
-        std::vector<double> spot_covariances;
         std::vector<int> bbox_depths;
         sigma_b_variances.reserve(reflections_3d.size());
         sigma_m_variances.reserve(reflections_3d.size());
@@ -1281,6 +1290,7 @@ int main(int argc, char **argv) {
         try {
             std::vector<double> flat_coms;
             std::vector<double> flat_covariances;
+            std::vector<int> spot_intensities;
             std::vector<int> ids;
             std::vector<int> centers_map_keys;
             for (const auto &pair : *reflection_centers_2d) {
@@ -1298,6 +1308,10 @@ int main(int argc, char **argv) {
                 for (auto cov : flat_covariances_this) {
                     flat_covariances.push_back(cov);
                 }
+                std::vector<int> spot_intensities_this = (*reflection_intensities_mapptr)[imageno];
+                for (auto intensity : spot_intensities_this) {
+                    spot_intensities.push_back(intensity);
+                }
                 for (int i = 0; i < n_refls; ++i) {
                     ids.push_back(id);
                 }
@@ -1313,6 +1327,7 @@ int main(int argc, char **argv) {
             // Add the reflection centroids to the table
             table.add_column("xyzobs.px.value", flat_coms.size() / 3, 3, flat_coms);
             table.add_column("spot_covariance", flat_covariances.size() / 3, 3, flat_covariances);
+            table.add_column("intensity.sum.value", spot_intensities.size(), 1, spot_intensities);
             // Map each reflection to the generated experiment ID
             table.add_column("id", ids.size(), 1, ids);
 
