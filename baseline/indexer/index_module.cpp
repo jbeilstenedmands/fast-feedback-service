@@ -43,24 +43,23 @@ struct IndexingResult {
     std::vector<double> xyzcal_px;
     std::vector<double> s1;
     std::vector<double> delpsi;
-    std::vector<double> spot_covariances;
     std::vector<double> rmsds;
+    std::vector<bool> selection_for_input; // Can use on the input data,
+    // to select data for successfully indexed reflections.
+    // Selection_for_input is of length n_input_refls
 };
 
 IndexingResult index_from_ssx_cells(const std::vector<double> &crystal_vectors,
                                     std::vector<double> rlp_data,
                                     std::vector<double> xyzobs_px_data,
                                     Eigen::Vector3d s0,
-                                    Panel panel,
-                                    std::vector<double> spot_covariances) {
+                                    Panel panel) {
     // Convert the raw input data arrays to spans
     mdspan_type<double> xyzobs_px =
       mdspan_type<double>(xyzobs_px_data.data(), xyzobs_px_data.size() / 3, 3);
     mdspan_type<double> rlp =
       mdspan_type<double>(rlp_data.data(), rlp_data.size() / 3, 3);
-    mdspan_type<double> covariances =
-      mdspan_type<double>(spot_covariances.data(), spot_covariances.size() / 3, 3);
-
+    
     // first convert the cells vector to crystals
     std::vector<Crystal> crystals{};
     for (int i = 0; i < crystal_vectors.size() / 9; ++i) {
@@ -127,14 +126,6 @@ IndexingResult index_from_ssx_cells(const std::vector<double> &crystal_vectors,
     }
     mdspan_type<double> xyzobs_px_indexed = mdspan_type<double>(
       xyzobs_px_indexed_data.data(), xyzobs_px_indexed_data.size() / 3, 3);
-    std::vector<double> spot_covariances_indexed_data;
-    for (auto &i : selection) {
-        spot_covariances_indexed_data.push_back(covariances(i, 0));
-        spot_covariances_indexed_data.push_back(covariances(i, 1));
-        spot_covariances_indexed_data.push_back(covariances(i, 2));
-    }
-    mdspan_type<double> spot_covariances_indexed = mdspan_type<double>(
-      spot_covariances_indexed_data.data(), spot_covariances_indexed_data.size() / 3, 3);
 
     // Now predict (generates xyzcal.px and delpsi).
     ReflectionTable refls;
@@ -175,10 +166,16 @@ IndexingResult index_from_ssx_cells(const std::vector<double> &crystal_vectors,
         rmsds.push_back(rmsd_psi);
     }
 
+    // determine the boolean selection for the input data.
+    std::vector<bool> boolean_selection(xyzobs_px_data.size() / 3 ,false);
+    for (std::size_t i=0;i<selection.size();i++){
+        if (sel_for_indexed[i]){ // i.e. if indexed, and meets the delta_r filter
+          boolean_selection[selection[i]] = true;
+        }
+    }
+
     // select on the reflection table.
-    refls.add_column(
-      "xyzobs.px.value", xyzobs_px_indexed.extent(0), 3, xyzobs_px_indexed_data);
-    refls.add_column("spot_covariances", spot_covariances_indexed.extent(0), 3, spot_covariances_indexed_data);
+    refls.add_column("xyzobs.px.value", xyzobs_px_indexed.extent(0), 3, xyzobs_px_indexed_data);
     ReflectionTable filtered = refls.select(sel_for_indexed);
 
     // Get the data arrays to return.
@@ -188,8 +185,6 @@ IndexingResult index_from_ssx_cells(const std::vector<double> &crystal_vectors,
     xyzcal_px = xyzcal_px_.value();
     auto xyzobs_px_filtered_ = filtered.column<double>("xyzobs.px.value");
     auto &xyzobs_px_filtered = xyzobs_px_filtered_.value();
-    auto spot_covariances_filtered_ = filtered.column<double>("spot_covariances");
-    auto &spot_covariances_filtered = spot_covariances_filtered_.value();
     auto s1_ = filtered.column<double>("s1");
     auto &s1 = s1_.value();
     auto midx_ = filtered.column<int>("miller_index");
@@ -202,9 +197,6 @@ IndexingResult index_from_ssx_cells(const std::vector<double> &crystal_vectors,
     std::vector<double> xyzobs_px_vec(
       xyzobs_px_filtered.data_handle(),
       xyzobs_px_filtered.data_handle() + xyzobs_px_filtered.size());
-    std::vector<double> spot_cov_vec(
-      spot_covariances_filtered.data_handle(),
-      spot_covariances_filtered.data_handle() + spot_covariances_filtered.size());
     std::vector<double> delpsi_vec(delpsi.data_handle(),
                                    delpsi.data_handle() + delpsi.size());
 
@@ -215,8 +207,8 @@ IndexingResult index_from_ssx_cells(const std::vector<double> &crystal_vectors,
                           std::move(xyzcal_px_vec),
                           std::move(s1_vec),
                           std::move(delpsi_vec),
-                          std::move(spot_cov_vec),
-                          rmsds);
+                          rmsds,
+                          std::move(boolean_selection));
 }
 
 NB_MODULE(index, m) {
@@ -239,8 +231,8 @@ NB_MODULE(index, m) {
       .def_prop_ro("xyzcal_px", [](const IndexingResult &r) { return r.xyzcal_px; })
       .def_prop_ro("s1", [](const IndexingResult &r) { return r.s1; })
       .def_prop_ro("delpsi", [](const IndexingResult &r) { return r.delpsi; })
-      .def_prop_ro("spot_covariances", [](const IndexingResult &r) { return r.spot_covariances; })
-      .def_prop_ro("rmsds", [](const IndexingResult &r) { return r.rmsds; });
+      .def_prop_ro("rmsds", [](const IndexingResult &r) { return r.rmsds; })
+      .def_prop_ro("selection_for_input", [](const IndexingResult &r) { return r.selection_for_input; });
     m.def("make_panel", &make_panel, "Create a configured Panel object");
     m.def("calculate_mu_for_material_at_wavelength",
           &calculate_mu_for_material_at_wavelength,
@@ -258,7 +250,6 @@ NB_MODULE(index, m) {
           nb::arg("xyzobs_px"),
           nb::arg("s0"),
           nb::arg("panel"),
-          nb::arg("spot_covariances"),
           "Assign miller indices to the best crystal, predict reflections and "
           "calculate rnmsds");
 }
