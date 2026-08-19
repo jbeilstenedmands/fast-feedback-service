@@ -1,0 +1,128 @@
+#pragma once
+
+#include <Eigen/Core>
+
+#include <array>
+#include <vector>
+using DerivativeMatrices = std::array<Eigen::Matrix3d, 6>;
+
+class Simple6MosaicityParameterisation {
+public:
+
+  using Vector6d = Eigen::Matrix<double, 6, 1>;
+  using Matrix3d = Eigen::Matrix3d;
+
+  Simple6MosaicityParameterisation()
+      : parameters_(Vector6d::Zero()) {}
+
+  explicit Simple6MosaicityParameterisation(
+      const Vector6d& params)
+      : parameters_(params) {}
+
+  static constexpr int num_parameters() {
+    return 6;
+  }
+
+  const Vector6d& parameters() const {
+    return parameters_;
+  }
+
+  void set_parameters(const Vector6d& p) {
+    parameters_ = p;
+  }
+
+  Matrix3d M() const {
+
+    const double b1 = parameters_(0);
+    const double b2 = parameters_(1);
+    const double b3 = parameters_(2);
+    const double b4 = parameters_(3);
+    const double b5 = parameters_(4);
+    const double b6 = parameters_(5);
+
+    Matrix3d M;
+
+    M <<
+        b1, 0.0, 0.0,
+        b2, b3, 0.0,
+        b4, b5, b6;
+
+    return M;
+  }
+
+  Matrix3d sigma() const {
+
+    Matrix3d m = M();
+
+    return m * m.transpose();
+  }
+
+  DerivativeMatrices first_derivatives() const {
+
+    const double b1 = parameters_(0);
+    const double b2 = parameters_(1);
+    const double b3 = parameters_(2);
+    const double b4 = parameters_(3);
+    const double b5 = parameters_(4);
+    const double b6 = parameters_(5);
+
+    DerivativeMatrices dSigma;
+
+    dSigma[0] <<
+        2.0*b1, b2,     b4,
+        b2,     0.0,    0.0,
+        b4,     0.0,    0.0;
+
+    dSigma[1] <<
+        0.0,    b1,     0.0,
+        b1,     2.0*b2, b4,
+        0.0,    b4,     0.0;
+
+    dSigma[2] <<
+        0.0,    0.0,    0.0,
+        0.0,    2.0*b3, b5,
+        0.0,    b5,     0.0;
+
+    dSigma[3] <<
+        0.0,    0.0,    b1,
+        0.0,    0.0,    b2,
+        b1,     b2,     2.0*b4;
+
+    dSigma[4] <<
+        0.0,    0.0,    0.0,
+        0.0,    0.0,    b3,
+        0.0,    b3,     2.0*b5;
+
+    dSigma[5] <<
+        0.0,    0.0,    0.0,
+        0.0,    0.0,    0.0,
+        0.0,    0.0,    2.0*b6;
+
+    return dSigma;
+  }
+
+  struct Mosaicity {
+    double min;
+    double mid;
+    double max;
+  };
+
+  Mosaicity mosaicity() const {
+
+    Eigen::SelfAdjointEigenSolver<Matrix3d> solver(
+        sigma());
+
+    Eigen::Vector3d eig =
+        solver.eigenvalues();
+
+    double m1 = std::sqrt(std::max(0.0, eig(0)));
+    double m2 = std::sqrt(std::max(0.0, eig(1)));
+    double m3 = std::sqrt(std::max(0.0, eig(2)));
+
+    return {m1, m2, m3};
+  }
+
+private:
+
+  Vector6d parameters_;
+};

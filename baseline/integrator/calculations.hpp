@@ -19,6 +19,11 @@ using DerivativeVectors = std::array<Vec3, 6>;
 using SigmaDerivativeMatrices = std::array<Eigen::Matrix2d, 6>;
 using MuDerivativeVectors = std::array<Eigen::Vector2d, 6>;
 
+/*
+This is the per-reflection calculation code.
+Using the observed covariance, observed centroid and the 6-parameter mosaicity model,
+this calculates the Likelihood, derivatives and fisher information for the refinement.
+*/
 
 inline Matrix2d compute_dSbar(
     const Matrix3d& S,
@@ -69,6 +74,13 @@ public:
         epsilon_ = norm_s0 - mu2;
         mubar_ = mu1 + S12 * (epsilon_ / S22);
         Sbar_ = S11 - (S12 / S22) * S21;
+
+        for (std::size_t i = 0; i < dSbar_.size(); ++i){
+            dSbar_[i] = compute_dSbar(S_, dS_[i]);
+        }
+        for (std::size_t i = 0; i < dmbar_.size(); ++i){
+            dmbar_[i] = compute_dmbar(S_, dS_[i], epsilon_);
+        }
     }
 
     const Vec2& mean() const {
@@ -83,26 +95,12 @@ public:
         return epsilon_;
     }
 
-    const SigmaDerivativeMatrices& first_derivatives_of_sigma(){
-        if (!dSbar_) {
-            SigmaDerivativeMatrices result;
-            for (std::size_t i = 0; i < result.size(); ++i){
-                result[i] = compute_dSbar(S_, dS_[i]);
-            }
-            dSbar_ = std::move(result);
-        }
-        return *dSbar_;
+    const SigmaDerivativeMatrices& first_derivatives_of_sigma() const {
+        return dSbar_;
     }
 
-    const MuDerivativeVectors& first_derivatives_of_mean(){
-        if (!dmbar_) {
-            MuDerivativeVectors result;
-            for (std::size_t i = 0; i < result.size(); ++i){
-                result[i] = compute_dmbar(S_, dS_[i], epsilon_);
-            }
-            dmbar_ = std::move(result);
-        }
-        return *dmbar_;
+    const MuDerivativeVectors& first_derivatives_of_mean() const {
+        return dmbar_;
     }
 
 private:
@@ -113,8 +111,8 @@ private:
     double epsilon_;
     Vec2 mubar_;
     Mat2 Sbar_;
-    std::optional<SigmaDerivativeMatrices> dSbar_;
-    std::optional<MuDerivativeVectors> dmbar_;
+    SigmaDerivativeMatrices dSbar_;
+    MuDerivativeVectors dmbar_;
 };
 
 DerivativeMatrices rotate_mat3_double(
@@ -150,6 +148,7 @@ public:
 
   ReflectionLikelihood(
       const ModelState& model_state,
+      const Eigen::Matrix3d& A,
       const Eigen::Vector3d& s0,
       const Eigen::Vector3d& sp,
       const Eigen::Vector3i& h,
@@ -165,12 +164,12 @@ public:
 private:
 
   // Geometry / model
-  ReflectionModelState model_state_;
+  ModelState model_state_;
 
   // Reflection data
   Eigen::Vector3d s0_;
   Eigen::Vector3d sp_;
-  Eigen::Vector3i h_;
+  Eigen::Vector3d r_;
   double norm_s0_;
   double ctot_;
 
@@ -187,8 +186,23 @@ private:
   ConditionalDistribution conditional_;
 };
 
+static Eigen::Matrix3d compute_S(
+    const ModelState& state,
+    const Eigen::Matrix3d& R)
+{
+    return R * state.mosaicity_covariance_matrix() * R.transpose();
+}
+
+static DerivativeMatrices compute_dS(
+    const ModelState& state,
+    const Eigen::Matrix3d& R)
+{
+    return rotate_mat3_double(R, state.dM_dp());
+}
+
 ReflectionLikelihood::ReflectionLikelihood(
     const ModelState& model_state,
+    const Eigen::Matrix3d& A,
     const Eigen::Vector3d& s0,
     const Eigen::Vector3d& sp,
     const Eigen::Vector3i& h,
@@ -196,33 +210,26 @@ ReflectionLikelihood::ReflectionLikelihood(
     const Eigen::Vector2d& mobs,
     const Eigen::Matrix2d& sobs)
     :
-    model_state_(model_state, s0, h),
+    model_state_(model_state),
     s0_(s0),
     sp_(sp),
-    h_(h),
+    r_(A * h.cast<double>()),
     norm_s0_(s0.norm()),
     ctot_(ctot),
     mobs_(mobs),
     sobs_(sobs),
-    R_(compute_change_of_basis_operation(s0, sp))
-{
-    // Predicted diffracted ray
-    Eigen::Vector3d s2 = s0_ + model_state_.get_r();
-    // Rotated mean
-    mu_ = R_ * s2;
-    // Rotated covariance
-    S_ = R_ * model_state_.mosaicity_covariance_matrix() * R_.transpose();
-    // Rotated covariance derivatives
-    dS_ = rotate_mat3_double(R_, model_state_.get_dS_dp());
-    // Construct conditional distribution
-    conditional_ = ConditionalDistribution(norm_s0_,mu_,S_,dS_);
-}
+    R_(compute_change_of_basis_operation(s0, sp)),
+    mu_(R_ * (s0_ + r_)),
+    S_(compute_S(model_state_, R_)),
+    dS_(compute_dS(model_state_, R_)),
+    conditional_(norm_s0_, mu_, S_, dS_) {}
+
 
 void ReflectionLikelihood::update(){
     // s2 unchanged as r unchanged
     // mu unchanged, so no dmu term.
-    S_ = R_ * model_state_.mosaicity_covariance_matrix() * R_.transpose();
-    dS_ = rotate_mat3_double(R_, model_state_.get_dS_dp());
+    S_ = compute_S(model_state_, R_);
+    dS_ = compute_dS(model_state_, R_);
     // make a new conditional distribution with updated values.
     conditional_ = ConditionalDistribution(norm_s0_, mu_, S_, dS_);
 }
