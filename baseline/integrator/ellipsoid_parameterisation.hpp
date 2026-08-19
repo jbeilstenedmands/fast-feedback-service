@@ -5,12 +5,11 @@
 #include <array>
 #include <vector>
 using DerivativeMatrices = std::array<Eigen::Matrix3d, 6>;
+using Vector6d = Eigen::Matrix<double, 6, 1>;
+using Matrix3d = Eigen::Matrix3d;
 
 class Simple6MosaicityParameterisation {
 public:
-
-  using Vector6d = Eigen::Matrix<double, 6, 1>;
-  using Matrix3d = Eigen::Matrix3d;
 
   Simple6MosaicityParameterisation()
       : parameters_(Vector6d::Zero()) {}
@@ -18,6 +17,20 @@ public:
   explicit Simple6MosaicityParameterisation(
       const Vector6d& params)
       : parameters_(params) {}
+
+  static Simple6MosaicityParameterisation from_sigma_d(double sigma_d){
+    Vector6d p;
+
+    p <<
+      sigma_d,
+      0.0,
+      sigma_d,
+      0.0,
+      0.0,
+      sigma_d;
+
+    return Simple6MosaicityParameterisation(p);
+  }
 
   static constexpr int num_parameters() {
     return 6;
@@ -126,3 +139,4 @@ private:
 
   Vector6d parameters_;
 };
+

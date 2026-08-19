@@ -3,7 +3,7 @@
 #include <Eigen/Core>
 #include <optional>
 #include <vector>
-#include "model_state.hpp"
+#include "ellipsoid_parameterisation.hpp"
 
 using Matrix3d = Eigen::Matrix3d;
 using Matrix2d = Eigen::Matrix2d;
@@ -147,7 +147,7 @@ class ReflectionLikelihood {
 public:
 
   ReflectionLikelihood(
-      const ModelState& model_state,
+      const Simple6MosaicityParameterisation& model,
       const Eigen::Matrix3d& A,
       const Eigen::Vector3d& s0,
       const Eigen::Vector3d& sp,
@@ -160,11 +160,13 @@ public:
     double log_likelihood() const;
     ParameterVector first_derivatives() const;
     FisherMatrix fisher_information() const;
+    const ConditionalDistribution& conditional() const;
+    const Vector2d& mobs() const;
 
 private:
 
   // Geometry / model
-  ModelState model_state_;
+  const Simple6MosaicityParameterisation& model_;
 
   // Reflection data
   Eigen::Vector3d s0_;
@@ -186,22 +188,29 @@ private:
   ConditionalDistribution conditional_;
 };
 
+const ConditionalDistribution& ReflectionLikelihood::conditional() const {
+    return conditional_;
+}
+const Vector2d& ReflectionLikelihood::mobs() const {
+    return mobs_;
+}
+
 static Eigen::Matrix3d compute_S(
-    const ModelState& state,
+    const Simple6MosaicityParameterisation& model,
     const Eigen::Matrix3d& R)
 {
-    return R * state.mosaicity_covariance_matrix() * R.transpose();
+    return R * model.sigma() * R.transpose();
 }
 
 static DerivativeMatrices compute_dS(
-    const ModelState& state,
+    const Simple6MosaicityParameterisation& model,
     const Eigen::Matrix3d& R)
 {
-    return rotate_mat3_double(R, state.dM_dp());
+    return rotate_mat3_double(R, model.first_derivatives());
 }
 
 ReflectionLikelihood::ReflectionLikelihood(
-    const ModelState& model_state,
+    const Simple6MosaicityParameterisation& model,
     const Eigen::Matrix3d& A,
     const Eigen::Vector3d& s0,
     const Eigen::Vector3d& sp,
@@ -210,7 +219,7 @@ ReflectionLikelihood::ReflectionLikelihood(
     const Eigen::Vector2d& mobs,
     const Eigen::Matrix2d& sobs)
     :
-    model_state_(model_state),
+    model_(model),
     s0_(s0),
     sp_(sp),
     r_(A * h.cast<double>()),
@@ -220,16 +229,16 @@ ReflectionLikelihood::ReflectionLikelihood(
     sobs_(sobs),
     R_(compute_change_of_basis_operation(s0, sp)),
     mu_(R_ * (s0_ + r_)),
-    S_(compute_S(model_state_, R_)),
-    dS_(compute_dS(model_state_, R_)),
+    S_(compute_S(model_, R_)),
+    dS_(compute_dS(model_, R_)),
     conditional_(norm_s0_, mu_, S_, dS_) {}
 
 
 void ReflectionLikelihood::update(){
     // s2 unchanged as r unchanged
     // mu unchanged, so no dmu term.
-    S_ = compute_S(model_state_, R_);
-    dS_ = compute_dS(model_state_, R_);
+    S_ = compute_S(model_, R_);
+    dS_ = compute_dS(model_, R_);
     // make a new conditional distribution with updated values.
     conditional_ = ConditionalDistribution(norm_s0_, mu_, S_, dS_);
 }
@@ -239,7 +248,7 @@ double ReflectionLikelihood::log_likelihood() const {
 
     // Marginal
     double S22 = S_(2, 2);
-    double S22_inv = 1 / S22;
+    const double S22_inv = 1.0 / S22;
     double mu2 = mu_(2);
 
     // Conditional
@@ -268,14 +277,14 @@ ParameterVector ReflectionLikelihood::first_derivatives() const {
 
     // Marginal
     const double S22 = S_(2, 2);
-    const double S22_inv = 1 / S22;
+    const double S22_inv = 1.0 / S22;
     const double mu2 = mu_(2);
 
     // Conditional
     const Mat2 Sbar = conditional_.sigma();
     const Vec2 mubar = conditional_.mean();
-    const SigmaDerivativeMatrices dSbar = conditional_.first_derivatives_of_sigma();
-    const MuDerivativeVectors dmbar = conditional_.first_derivatives_of_mean();
+    const SigmaDerivativeMatrices& dSbar = conditional_.first_derivatives_of_sigma();
+    const MuDerivativeVectors& dmbar = conditional_.first_derivatives_of_mean();
     const Mat2 Sbar_inv = Sbar.inverse();
 
     const double epsilon = norm_s0_ - mu2;

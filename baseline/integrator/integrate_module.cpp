@@ -7,9 +7,10 @@
 
 #include <experimental/mdspan>
 #include "integrator/sigma_estimation.hpp"
-#include "ellipsoid_model.hpp"
-#include "model_state.hpp"
+#include "ellipsoid_parameterisation.hpp"
+//#include "model_state.hpp"
 #include "calculations.hpp"
+#include "target.hpp"
 #include <iostream>
 
 template <typename T>
@@ -153,7 +154,24 @@ void ssx_integrate(const std::vector<Vector3d> xyzcal_px,
     profile.parameterisation.update_model(refiner.state)
     # Set the mosaicity
     experiment.crystal.mosaicity = profile*/
-    auto profile =
+    Matrix3d A;
+    A << -0.004379, -0.008665,  0.008310,
+        0.012045, -0.003290,  0.002932,
+        0.000628,  0.008554,  0.009578;
+    // Note model must outlive MLTarget due to reference.
+    Simple6MosaicityParameterisation model = Simple6MosaicityParameterisation::from_sigma_d(overall_sigma_b);
+    MaximumLikelihoodTarget target = MaximumLikelihoodTarget(
+        model,
+        A,
+        s0,
+        xyzcal_px,
+        xyzobs_px,
+        covariances,
+        intensities,
+        miller_indices,
+        panel
+    );
+    /*auto profile =
     Simple6ProfileModel::from_sigma_d(overall_sigma_b);
 
     auto sigma =
@@ -165,7 +183,7 @@ void ssx_integrate(const std::vector<Vector3d> xyzcal_px,
     auto mosaicity =
         profile.mosaicity();
 
-    auto modelstate = ModelState(profile);
+    auto modelstate = ModelState(profile);*/
     std::cout << "here" << std::endl;
     
 
