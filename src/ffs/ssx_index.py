@@ -175,6 +175,7 @@ class OutputAggregator:
         self.delpsical_output = []
         self.spot_covariances = []
         self.intensities = []
+        self.mobs = []
         self.ids_output = []
         self.s1_output = []
         self.image_nos_output = []
@@ -185,7 +186,7 @@ class OutputAggregator:
         self.output_crystals_id_nos = []
         self.identifiers_map = identifiers_map
 
-    def add_result(self, lattice, i, spot_covariances, spot_intensities):
+    def add_result(self, lattice, i, spot_covariances, spot_intensities, spot_mobs):
         A = np.reshape(np.array(lattice.A_matrix, dtype="float64"), (3, 3))
         A_inv = np.linalg.inv(A)
         self.output_crystals_list.append(
@@ -203,6 +204,7 @@ class OutputAggregator:
         xyzcal = np.array(lattice.xyzcal_px).reshape(-1, 3)
         covariances = spot_covariances[lattice.selection_for_input,:]
         intensities = spot_intensities[lattice.selection_for_input]
+        mobs = spot_mobs[lattice.selection_for_input,:]
         s1_reshape = np.array(lattice.s1).reshape(-1, 3)
         delpsi = np.array(lattice.delpsi)
         rmsdx, rmsdy, rmsd_psi = lattice.rmsds
@@ -216,6 +218,7 @@ class OutputAggregator:
         self.delpsical_output.append(np.array(delpsi))
         self.spot_covariances.append(covariances)
         self.intensities.append(intensities)
+        self.mobs.append(mobs)
         self.s1_output.append(s1_reshape)
         self.ids_output.append(np.full(n, self.output_id, dtype=np.int32))
         self.image_nos_output.append(np.full(n, i, dtype=np.int32))
@@ -231,6 +234,7 @@ class OutputAggregator:
             group["xyzobs.px.value"] = np.concatenate(self.xyzobs_output)
             group["xyzcal.px"] = np.concatenate(self.xyzcal_px_output)
             group["spot_covariance"] = np.concatenate(self.spot_covariances)
+            group["spot_mobs"] = np.concatenate(self.mobs)
             group["intensity.sum.value"] = np.concatenate(self.intensities)
             group["s1"] = np.concatenate(self.s1_output)
             group["delpsical.rad"] = np.concatenate(self.delpsical_output)
@@ -311,6 +315,7 @@ def run(args=None):
             processing_group = refls["dials"]["processing"]["group_0"]
             xyzs = processing_group["xyzobs.px.value"][:]
             spot_covariances = processing_group["spot_covariance"][:]
+            spot_mobs = processing_group["spot_mobs"][:]
             intensities = processing_group["intensity.sum.value"][:]
             ids = processing_group["id"][:]
             experiment_ids = processing_group.attrs["experiment_ids"]
@@ -352,8 +357,9 @@ def run(args=None):
         xyzs_this = xyzs[start:end]
         spot_cov_this = spot_covariances[start:end]
         intensities_this = intensities[start:end]
+        spot_mobs_this = spot_mobs[start:end]
         if xyzs_this.any():
-            input_data_arrays.append((xyzs_this, spot_cov_this, intensities_this))
+            input_data_arrays.append((xyzs_this, spot_cov_this, intensities_this, spot_mobs_this))
             id_values.append(id_)
 
     ## Initialise the GPU indexer.
@@ -386,6 +392,7 @@ def run(args=None):
         xyz_data = t[0]
         spot_covariances = t[1]
         spot_intensities = t[2]
+        spot_mobs = t[3]
         if xyz_data.shape[0] < min_spots:
             continue
         n_considered += 1
@@ -395,7 +402,7 @@ def run(args=None):
             n_indexed_images += 1
             lattice = result.lattices[0]
             # now save stuff for output
-            output_aggregator.add_result(lattice, i, spot_covariances, spot_intensities)
+            output_aggregator.add_result(lattice, i, spot_covariances, spot_intensities, spot_mobs)
             # print number of spots indexed and rmsds
             rmsdx, rmsdy, rmsd_psi = lattice.rmsds
             cell_str = ", ".join(f"{i:.3f}" for i in lattice.unit_cell)

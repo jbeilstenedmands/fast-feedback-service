@@ -720,6 +720,8 @@ int main(int argc, char **argv) {
     std::unique_ptr<std::map<int, std::vector<int>>> reflection_intensities_mapptr = nullptr;
     std::mutex
       reflection_intensities_mutex;  // Mutex to protect the reflection intensities map
+    std::unique_ptr<std::map<int, std::vector<double>>> mobs_mapptr = nullptr;
+    std::mutex mobs_mutex;  // Mutex to protect the reflection intensities map
 
     if (oscillation_width > 0) {
         // If oscillation information is available then this is a rotation dataset
@@ -736,6 +738,8 @@ int main(int argc, char **argv) {
               std::make_unique<std::map<int, std::vector<double>>>();
             reflection_intensities_mapptr =
               std::make_unique<std::map<int, std::vector<int>>>();
+            mobs_mapptr =
+              std::make_unique<std::map<int, std::vector<double>>>();
         }
     }
 
@@ -929,6 +933,7 @@ int main(int argc, char **argv) {
                 std::vector<float> centers_of_mass;
                 std::vector<double> spot_covariances;
                 std::vector<int> spot_intensities;
+                std::vector<double> mobs;
                 // If this is a rotation dataset, store the connected component slice
                 if (oscillation_width) {
                     // Lock the mutex to protect the map
@@ -947,10 +952,12 @@ int main(int argc, char **argv) {
                         centers_of_mass.push_back(z);
                         auto [xmm, ymm] = panel.px_to_mm(x, y);
                         Vector3d s1 = panel.get_lab_coord(xmm, ymm);
-                        auto [varx, vary, varxy] = r.covariance_2D(s1, s0, panel);
+                        auto [xbar_0, xbar_1, varx, vary, varxy] = r.mobs_and_covariance_2D(s1, s0, panel);
                         spot_covariances.push_back(varx);
                         spot_covariances.push_back(vary);
                         spot_covariances.push_back(varxy);
+                        mobs.push_back(xbar_0);
+                        mobs.push_back(xbar_1);
                         spot_intensities.push_back(r.total_intensity());
                     }
                     if (save_to_h5) {
@@ -960,6 +967,8 @@ int main(int argc, char **argv) {
                         (*reflection_covariances_2d)[offset_image_num] = spot_covariances;
                         std::lock_guard<std::mutex> lock3(reflection_intensities_mutex);
                         (*reflection_intensities_mapptr)[offset_image_num] = spot_intensities;
+                        std::lock_guard<std::mutex> lock4(mobs_mutex);
+                        (*mobs_mapptr)[offset_image_num] = mobs;
                     }
                 }
 
@@ -1035,6 +1044,7 @@ int main(int argc, char **argv) {
                         json_data["spot_centers"] = centers_of_mass;
                         json_data["spot_covariances"] = spot_covariances;
                         json_data["spot_intensities"] = spot_intensities;
+                        json_data["mobs"] = mobs;
                     }
                     // Send the JSON data through the pipe
                     pipeHandler->sendData(json_data);
@@ -1290,6 +1300,7 @@ int main(int argc, char **argv) {
         try {
             std::vector<double> flat_coms;
             std::vector<double> flat_covariances;
+            std::vector<double> flat_mobs;
             std::vector<int> spot_intensities;
             std::vector<int> ids;
             std::vector<int> centers_map_keys;
@@ -1312,6 +1323,10 @@ int main(int argc, char **argv) {
                 for (auto intensity : spot_intensities_this) {
                     spot_intensities.push_back(intensity);
                 }
+                std::vector<double> mobs_this = (*mobs_mapptr)[imageno];
+                for (auto m : mobs_this) {
+                    flat_mobs.push_back(m);
+                }
                 for (int i = 0; i < n_refls; ++i) {
                     ids.push_back(id);
                 }
@@ -1327,6 +1342,7 @@ int main(int argc, char **argv) {
             // Add the reflection centroids to the table
             table.add_column("xyzobs.px.value", flat_coms.size() / 3, 3, flat_coms);
             table.add_column("spot_covariance", flat_covariances.size() / 3, 3, flat_covariances);
+            table.add_column("spot_mobs", flat_mobs.size() / 2, 2, flat_mobs);
             table.add_column("intensity.sum.value", spot_intensities.size(), 1, spot_intensities);
             // Map each reflection to the generated experiment ID
             table.add_column("id", ids.size(), 1, ids);

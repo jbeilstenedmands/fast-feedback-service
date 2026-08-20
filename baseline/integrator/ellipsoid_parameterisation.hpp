@@ -1,7 +1,10 @@
 #pragma once
 
 #include <Eigen/Core>
-
+#include <Eigen/Eigenvalues>
+#include <iostream>
+#include <iomanip>
+#include <cmath>
 #include <array>
 #include <vector>
 using DerivativeMatrices = std::array<Eigen::Matrix3d, 6>;
@@ -139,4 +142,43 @@ private:
 
   Vector6d parameters_;
 };
+
+
+
+void print_eigen_values_and_vectors_static(
+    const Eigen::Matrix3d& A)
+{
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(A);
+
+    if (solver.info() != Eigen::Success) {
+        throw std::runtime_error(
+            "Failed to compute eigendecomposition");
+    }
+
+    const Eigen::Vector3d& eigen_values =
+        solver.eigenvalues();
+
+    const Eigen::Matrix3d& eigen_vectors =
+        solver.eigenvectors();
+
+    std::cout << "\nEigen Values:\n"
+              << eigen_values.asDiagonal().toDenseMatrix()
+              << "\n";
+
+    std::cout << "\nEigen Vectors:\n"
+              << eigen_vectors
+              << "\n";
+
+    std::cout
+        << "\nInvariant crystal mosaicity:\n"
+        << "M1 : "
+        << std::sqrt(std::max(0.0, eigen_values(0)))
+        << " A^-1\n"
+        << "M2 : "
+        << std::sqrt(std::max(0.0, eigen_values(1)))
+        << " A^-1\n"
+        << "M3 : "
+        << std::sqrt(std::max(0.0, eigen_values(2)))
+        << " A^-1\n";
+}
 

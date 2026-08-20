@@ -1,3 +1,5 @@
+#pragma once
+
 class MaximumLikelihoodTarget {
 public:
 
@@ -12,6 +14,7 @@ public:
         const std::vector<Eigen::Vector3d>& covariances,
         const std::vector<double>& intensities,
         const std::vector<Eigen::Vector3i>& miller_indices,
+        const std::vector<Eigen::Vector2d>& mobs,
         const Panel& panel);
 
     void update();
@@ -39,17 +42,19 @@ MaximumLikelihoodTarget::MaximumLikelihoodTarget(
     const Simple6MosaicityParameterisation& model,
     const Eigen::Matrix3d& A,
     const Eigen::Vector3d& s0,
-    const std::vector<Eigen::Vector3d>& xyzcal_mm,
-    const std::vector<Eigen::Vector3d>& xyzobs_mm,
+    const std::vector<Eigen::Vector3d>& xyzcal_px,
+    const std::vector<Eigen::Vector3d>& xyzobs_px,
     const std::vector<Eigen::Vector3d>& covariances,
     const std::vector<double>& intensities,
     const std::vector<Eigen::Vector3i>& miller_indices,
+    const std::vector<Eigen::Vector2d>& mobs,
     const Panel& panel)
     :
     model_(model)
+    
 {
     const std::size_t n = miller_indices.size();
-
+    double s0_length = s0.norm();
     /*assert xyzcal_mm.size() == n;
     DIALS_ASSERT(xyzobs_mm.size() == n);
     DIALS_ASSERT(covariances.size() == n);
@@ -60,11 +65,20 @@ MaximumLikelihoodTarget::MaximumLikelihoodTarget(
     for (std::size_t i = 0; i < n; ++i) {
 
         // FIXME is mobs, s1 in mm?
-        Vector3d s1cal = panel.get_lab_coord(xyzcal_mm[i][0], xyzcal_mm[i][1]);
-        Vector3d s1obs = panel.get_lab_coord(xyzobs_mm[i][0], xyzobs_mm[i][1]);
-        Eigen::Vector2d mobs = s1obs.head<2>();
+        auto [xmm, ymm] = panel.px_to_mm(xyzcal_px[i][0], xyzcal_px[i][1]);
+        Vector3d s1cal = panel.get_lab_coord(xmm, ymm);
+        s1cal.normalize();
+        s1cal = s1cal * s0_length;
+        auto [xomm, yomm] = panel.px_to_mm(xyzobs_px[i][0], xyzobs_px[i][1]);
+        Vector3d s1obs = panel.get_lab_coord(xomm, yomm);
+        s1obs.normalize();
+        s1obs = s1obs * s0_length;
+
+        //Eigen::Vector2d mobs = s1obs.head<2>();
         Eigen::Matrix2d sobs;
         sobs << covariances[i][0], covariances[i][2],covariances[i][2], covariances[i][1];
+
+        //std::cout << "Sobs " << sobs << " mobs " << mobs << " s1cal " << s1cal << std::endl;
 
         data_.emplace_back(
             model_,
@@ -73,7 +87,7 @@ MaximumLikelihoodTarget::MaximumLikelihoodTarget(
             s1cal,
             miller_indices[i],
             intensities[i],
-            mobs,
+            mobs[i],
             sobs);
     }
 }
@@ -136,56 +150,3 @@ MaximumLikelihoodTarget::fisher_information() const
 
     return I;
 }
-
-
-
-/*class MaximumLikelihoodTarget:
-    def __init__(
-        self, model, s0, sp_list, h_list, ctot_list, mobs_list, sobs_list, panel_ids
-    ):
-        # Check input
-        assert len(h_list) == sp_list.shape[-1]
-        assert len(h_list) == ctot_list.shape[-1]
-        assert len(h_list) == mobs_list.shape[-1]
-        assert len(h_list) == sobs_list.shape[-1]
-
-        # Save the model
-        self.model = model
-
-        # Compute the change of basis for each reflection
-        self.data = []
-        for i in range(len(h_list)):
-            self.data.append(
-                ReflectionLikelihood(
-                    model,
-                    s0,
-                    sp_list[:, i],
-                    matrix.col(h_list[i]),
-                    ctot_list[i],
-                    mobs_list[:, i],
-                    sobs_list[:, :, i],
-                    panel_ids[i],
-                )
-            )
-
-
-
-    def rmsd(self):
-        """
-        The RMSD in pixels
-
-        """
-        mse_x = 0.0
-        mse_y = 0.0
-        for i in range(len(self.data)):
-            R = self.data[i].R_cctbx
-            mbar = tuple(self.data[i].conditional.mean().flatten())
-            xobs = tuple(self.data[i].mobs.flatten())
-            norm_s0 = self.data[i].norm_s0
-            rse_i = rse(R, mbar, xobs, norm_s0, self.model.experiment.detector)
-            mse_x += rse_i[0]
-            mse_y += rse_i[1]
-        mse_x /= len(self.data)
-        mse_y /= len(self.data)
-        return np.sqrt(np.array([mse_x, mse_y]))
-        */

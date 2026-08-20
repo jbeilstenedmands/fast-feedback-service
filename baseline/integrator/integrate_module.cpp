@@ -10,8 +10,14 @@
 #include "ellipsoid_parameterisation.hpp"
 //#include "model_state.hpp"
 #include "calculations.hpp"
+#include "fisher_scoring_ml.hpp"
 #include "target.hpp"
 #include <iostream>
+
+using DerivativeMatrices = std::array<Eigen::Matrix3d, 6>;
+using Vector6d = Eigen::Matrix<double, 6, 1>;
+using Matrix3d = Eigen::Matrix3d;
+using Vector2d = Eigen::Vector2d;
 
 template <typename T>
 using mdspan_type =
@@ -115,8 +121,10 @@ void ssx_integrate(const std::vector<Vector3d> xyzcal_px,
     const std::vector<Vector3d> covariances,
     const std::vector<double> intensities,
     const std::vector<Eigen::Vector3i> miller_indices,
-     const Vector3d &s0,
-    const Panel &panel){
+    const std::vector<Vector2d> mobs,
+    const Vector3d &s0,
+    const Panel &panel,
+    const Matrix3d A){
     double tot_sigma_b = 0.0;
     int n = xyzcal_px.size();
     for (int i=0;i<n;i++){
@@ -154,12 +162,15 @@ void ssx_integrate(const std::vector<Vector3d> xyzcal_px,
     profile.parameterisation.update_model(refiner.state)
     # Set the mosaicity
     experiment.crystal.mosaicity = profile*/
-    Matrix3d A;
-    A << -0.004379, -0.008665,  0.008310,
-        0.012045, -0.003290,  0.002932,
-        0.000628,  0.008554,  0.009578;
+    /*Matrix3d A;
+    A << 0.008567,  0.004376, -0.008402,
+                0.003397, -0.012023, -0.002822,
+                -0.008550, -0.000633, -0.009574;*/
     // Note model must outlive MLTarget due to reference.
     Simple6MosaicityParameterisation model = Simple6MosaicityParameterisation::from_sigma_d(overall_sigma_b);
+    Vector6d params = model.parameters();
+    std::cout << "making target" << std::endl;
+    // FIXME - check about whether need px or mm in target
     MaximumLikelihoodTarget target = MaximumLikelihoodTarget(
         model,
         A,
@@ -169,21 +180,16 @@ void ssx_integrate(const std::vector<Vector3d> xyzcal_px,
         covariances,
         intensities,
         miller_indices,
+        mobs,
         panel
     );
-    /*auto profile =
-    Simple6ProfileModel::from_sigma_d(overall_sigma_b);
+    std::cout << "Solving" << std::endl;
+    FisherScoringMaximumLikelihood scorer = FisherScoringMaximumLikelihood(model, target);
+    scorer.solve();
+    params = model.parameters();
+    Matrix3d sigma = model.sigma();
+    print_eigen_values_and_vectors_static(sigma);
 
-    auto sigma =
-        profile.sigma();
-
-    auto derivs =
-        profile.first_derivatives();
-
-    auto mosaicity =
-        profile.mosaicity();
-
-    auto modelstate = ModelState(profile);*/
     std::cout << "here" << std::endl;
     
 
