@@ -4,6 +4,7 @@
 #include <vector>
 #include "ellipsoid_parameterisation.hpp"
 #include "target.hpp"
+#include <iostream>
 
 using Matrix3d = Eigen::Matrix3d;
 using Matrix2d = Eigen::Matrix2d;
@@ -218,6 +219,7 @@ void FisherScoringMaximumLikelihood::callback(
 
     step.log_likelihood =
         target_.log_likelihood();
+    //std::cout << "LL " << target_.log_likelihood() << std::endl;
 
     step.mse =
         target_.mse();

@@ -161,24 +161,24 @@ void print_eigen_values_and_vectors_static(
     const Eigen::Matrix3d& eigen_vectors =
         solver.eigenvectors();
 
-    std::cout << "\nEigen Values:\n"
+    /*std::cout << "\nEigen Values:\n"
               << eigen_values.asDiagonal().toDenseMatrix()
               << "\n";
 
     std::cout << "\nEigen Vectors:\n"
               << eigen_vectors
-              << "\n";
+              << "\n";*/
 
     std::cout
         << "\nInvariant crystal mosaicity:\n"
         << "M1 : "
-        << std::sqrt(std::max(0.0, eigen_values(0)))
-        << " A^-1\n"
+        << std::sqrt(std::max(0.0, eigen_values(0)))*1e6
+        << " muA^-1\n"
         << "M2 : "
-        << std::sqrt(std::max(0.0, eigen_values(1)))
-        << " A^-1\n"
+        << std::sqrt(std::max(0.0, eigen_values(1)))*1e6
+        << " muA^-1\n"
         << "M3 : "
-        << std::sqrt(std::max(0.0, eigen_values(2)))
-        << " A^-1\n";
+        << std::sqrt(std::max(0.0, eigen_values(2)))*1e6
+        << " muA^-1\n";
 }
 

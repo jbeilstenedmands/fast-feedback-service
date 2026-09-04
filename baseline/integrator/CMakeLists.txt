@@ -34,7 +34,7 @@ target_link_libraries(baseline_integrator
     version
     ${CMAKE_THREAD_LIBS_INIT}
 )
-
+add_subdirectory(tests)
 nanobind_add_module(integrate
     integrate_module.cpp
     ${CMAKE_SOURCE_DIR}/src/integrator/sigma_estimation.cc)

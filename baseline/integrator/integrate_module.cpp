@@ -8,11 +8,11 @@
 #include <experimental/mdspan>
 #include "integrator/sigma_estimation.hpp"
 #include "ellipsoid_parameterisation.hpp"
-//#include "model_state.hpp"
 #include "calculations.hpp"
 #include "fisher_scoring_ml.hpp"
 #include "target.hpp"
 #include <iostream>
+#include "ssx_integrate.hpp"
 
 using DerivativeMatrices = std::array<Eigen::Matrix3d, 6>;
 using Vector6d = Eigen::Matrix<double, 6, 1>;
@@ -116,84 +116,7 @@ private:
 
 
 
-void ssx_integrate(const std::vector<Vector3d> xyzcal_px,
-    const std::vector<Vector3d> xyzobs_px,
-    const std::vector<Vector3d> covariances,
-    const std::vector<double> intensities,
-    const std::vector<Eigen::Vector3i> miller_indices,
-    const std::vector<Vector2d> mobs,
-    const Vector3d &s0,
-    const Panel &panel,
-    const Matrix3d A){
-    double tot_sigma_b = 0.0;
-    int n = xyzcal_px.size();
-    for (int i=0;i<n;i++){
-        tot_sigma_b += (covariances[i][0] + covariances[i][1])/2.0;
-    }
-    double sigma_b_spot = std::pow(tot_sigma_b / n, 0.5);
-    double sigma_b_rmsd = estimate_rmsd_sigma(
-            xyzcal_px, xyzobs_px,s0,
-            panel);
-    double overall_sigma_b = std::pow(std::pow(sigma_b_rmsd, 2) + std::pow(sigma_b_spot,2), 0.5);
-    std::cout << sigma_b_spot << std::endl;
-    std::cout << sigma_b_rmsd << std::endl;
-    std::cout << overall_sigma_b << std::endl;
 
-    // for the sigma6 mosaicity model, sigma_b is used as the starting point for the diagonal terms
-    // in the matrix
-
-    // for refinerdata, we need miller index too.
-    // in dials, refinerdata mainly reshapes the data and also damps the outlier weights. It is basically
-    // a data container
-    /*# Create the parameterisation
-    state = ModelState(
-        experiment,
-        profile.parameterisation.parameterisation(),
-        fix_orientation=True,
-        fix_unit_cell=True,
-        fix_wavelength_spread=wavelength_spread_model == "delta",
-    )
-
-    # Create the refiner and refine
-    refiner = ProfileRefiner(state, refiner_data, max_iter, LL_tolerance)
-    refiner.refine()
-
-    # Set the profile parameters
-    profile.parameterisation.update_model(refiner.state)
-    # Set the mosaicity
-    experiment.crystal.mosaicity = profile*/
-    /*Matrix3d A;
-    A << 0.008567,  0.004376, -0.008402,
-                0.003397, -0.012023, -0.002822,
-                -0.008550, -0.000633, -0.009574;*/
-    // Note model must outlive MLTarget due to reference.
-    Simple6MosaicityParameterisation model = Simple6MosaicityParameterisation::from_sigma_d(overall_sigma_b);
-    Vector6d params = model.parameters();
-    std::cout << "making target" << std::endl;
-    // FIXME - check about whether need px or mm in target
-    MaximumLikelihoodTarget target = MaximumLikelihoodTarget(
-        model,
-        A,
-        s0,
-        xyzcal_px,
-        xyzobs_px,
-        covariances,
-        intensities,
-        miller_indices,
-        mobs,
-        panel
-    );
-    std::cout << "Solving" << std::endl;
-    FisherScoringMaximumLikelihood scorer = FisherScoringMaximumLikelihood(model, target);
-    scorer.solve();
-    params = model.parameters();
-    Matrix3d sigma = model.sigma();
-    print_eigen_values_and_vectors_static(sigma);
-
-    std::cout << "here" << std::endl;
-    
-
-}
 
 
 
