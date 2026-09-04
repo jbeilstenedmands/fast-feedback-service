@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <ranges>
-#include <iostream>
 
 std::vector<double>
 MaximumLikelihoodTarget::damp_outlier_intensity_weights(
@@ -137,7 +136,6 @@ double MaximumLikelihoodTarget::log_likelihood() const
     for (const auto& r : data_) {
         lnL += r.log_likelihood();
     }
-    std::cout << lnL << std::endl;
     return lnL;
 }
 
