@@ -10,15 +10,15 @@
 using Matrix3d = Eigen::Matrix3d;
 using Vector2d = Eigen::Vector2d;
 
-void ssx_integrate(const std::vector<Vector3d> xyzcal_px,
-    const std::vector<Vector3d> xyzobs_px,
-    const std::vector<Vector3d> covariances,
-    const std::vector<double> intensities,
-    const std::vector<Eigen::Vector3i> miller_indices,
-    const std::vector<Vector2d> mobs,
+void ssx_integrate(const std::vector<Vector3d>& xyzcal_px,
+    const std::vector<Vector3d>& xyzobs_px,
+    const std::vector<Vector3d>& covariances,
+    const std::vector<double>& intensities,
+    const std::vector<Eigen::Vector3i>& miller_indices,
+    const std::vector<Vector2d>& mobs,
     const Vector3d &s0,
     const Panel &panel,
-    const Matrix3d A
+    const Matrix3d &A
     ){
     double max_separation=2.0;
     // perform max separation filter
