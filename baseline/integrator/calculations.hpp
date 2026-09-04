@@ -3,7 +3,6 @@
 #include <Eigen/Core>
 #include <optional>
 #include <vector>
-#include <iostream>
 #include "ellipsoid_parameterisation.hpp"
 
 using Matrix3d = Eigen::Matrix3d;
@@ -233,9 +232,7 @@ ReflectionLikelihood::ReflectionLikelihood(
     mu_(R_ * (s0_ + r_)),
     S_(compute_S(model_, R_)),
     dS_(compute_dS(model_, R_)),
-    conditional_(norm_s0_, mu_, S_, dS_) {
-        //std::cout << "intensity " << ctot_ << " miller index " <<  h << std::endl << " Sobs " << sobs_ << std::endl << " mobs " << mobs_ << std::endl << " s1cal " << sp_ << std::endl;
-    }
+    conditional_(norm_s0_, mu_, S_, dS_) {}
 
 
 void ReflectionLikelihood::update(){

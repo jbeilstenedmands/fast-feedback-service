@@ -1,13 +1,5 @@
 #pragma once
-#include <dx2/beam.hpp>
-#include <dx2/beam_ops.hpp>
-#include <dx2/crystal.hpp>
 #include <dx2/detector.hpp>
-#include <dx2/experiment.hpp>
-#include <dx2/goniometer.hpp>
-#include <dx2/h5/h5read_processed.hpp>
-#include <dx2/reflection.hpp>
-#include <dx2/scan.hpp>
 
 class MaximumLikelihoodTarget {
 public:

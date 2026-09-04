@@ -7,8 +7,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-
-import ffs.index
+import ffs.index # for make_panel
 import ffs.integrate
 
 def run(args=None):
@@ -18,8 +17,8 @@ def run(args=None):
         description="Runs standalone indexing of serial data using the GPU fast-feedback-indexer",
         epilog="Text at the bottom of help",
     )
-    parser.add_argument("-r", "--reflections", help="Path to the strong spots h5 file")
-    parser.add_argument("-e", "--experiments", help="Path to the imported.expt json")
+    parser.add_argument("-r", "--reflections", help="Path to the indexed.refl h5 file")
+    parser.add_argument("-e", "--experiments", help="Path to the indexed.expt json")
     parser.add_argument("--test", action="store_true", help="Run in test mode")
 
     parsed = parser.parse_args(args)
@@ -49,11 +48,6 @@ def run(args=None):
         "thickness": panel_dict["thickness"],
         "mu": panel_dict["mu"],
     }
-
-    '''cell = gemmi.UnitCell(*parsed.cell)
-    input_cell = np.reshape(
-        np.array(cell.orth.mat, dtype="float32"), (3, 3)
-    )  ## As an orthogonalisation matrix.'''
 
     if not parsed.reflections:
         print("No strong reflections h5 file provided.")
@@ -95,7 +89,6 @@ def run(args=None):
         )
         return
 
-    #output_aggregator = OutputAggregator(identifiers_map)
     tables = []
     id_values = []
 
@@ -150,11 +143,9 @@ def run(args=None):
         #    continue
         n_considered += 1
         
-        #print(obs_flat.size)
-        #print(covars_flat)
         covars = covars_flat.reshape(-1,3)
         sigma_b = np.mean((covars[0,:] + covars[1,:]) / 2)**0.5
-        # now need rmsd deviation
+
         st = time.time()
         a = xtal["real_space_a"]
         b = xtal["real_space_b"]
@@ -166,65 +157,10 @@ def run(args=None):
         )
         end = time.time()
         print(f"{end-st:8f}s")
-        '''sigmb_rmsd = ffs.integrate.estimate_rmsd_sigma(
-            xyzcal_this, xyzobs_this,s0,
-            panel)
-        print(sigmb_rmsd)
-        print(((sigmb_rmsd**2) + (sigma_b**2))**0.5)'''
 
-        '''sel = ffs.integrate.max_separation_filter(obs_flat, cal_flat, 2)
-        sel_ob = obs_flat[sel]
-        print(f"{obs_flat.size} {sel_ob.size}")
-        assert 0'''
-
-        # now make "refiner data"
-        # need s0, miller index, intensity, xy_px_obs, xy_pz_cal, covariance_obs, 
-
-        #sp, ctot, xbar, Sobs = reflection_statistics(
-        #        panel, xyz, s0_length, experiment.beam.get_s0(), sbox[r]
-        #    )
-
-        '''result = indexer.index(data)
-        if result.lattices:
-            n_indexed_images += 1
-            lattice = result.lattices[0]
-            # now save stuff for output
-            output_aggregator.add_result(lattice, i)
-            # print number of spots indexed and rmsds
-            rmsdx, rmsdy, rmsd_psi = lattice.rmsds
-            cell_str = ", ".join(f"{i:.3f}" for i in lattice.unit_cell)
-            print(
-                f"Indexed {(lattice.n_indexed)}/{int(data.size / 3)} spots on image {i + 1}:\n"
-                + f"  cell: {cell_str}\n"
-                + f"  RMSDs: (x(px), y(px), psi(rad)): {rmsdx:.3f}, {rmsdy:.3f}, {rmsd_psi:.5f}"
-            )
-        else:
-            print(f"No indexing solution for image {i + 1}")'''
 
     t2 = time.time()
     print(f"Mosaicity models refined on {n_considered} images")
-
-    # ideally would generate an indexed.expt type file...
-    # ok say we have in imported.expt, need to add crystals to indexed images
-    '''if parsed.test:
-        with open("indexed_crystals.json", "w") as f:
-            json.dump(output_aggregator.output_crystals_list, f, indent=2)
-    else:
-        expts["crystal"] = output_aggregator.output_crystals_list
-        for i, id_ in enumerate(output_aggregator.output_crystals_id_nos):
-            expts["experiment"][id_]["crystal"] = i
-        with open("indexed.expt", "w") as f:
-            json.dump(expts, f, indent=2)
-
-    # output in standard dials format so that can be understood by dials.
-    if not output_aggregator.ids_output:
-        print("No images successfully indexed, no reflection output will be written.")
-    else:
-        output_aggregator.write_table("indexed.refl")
-    t3 = time.time()
-    print(
-        f"Setup time: {t1 - st:.3f}s, index time {t2 - t1:.3f}s, write time {t3 - t2:.3f}s"
-    )'''
 
 
 if __name__ == "__main__":
