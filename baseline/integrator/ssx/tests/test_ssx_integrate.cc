@@ -12,7 +12,7 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <fstream>
-#include "ssx_integrate.hpp"
+#include "../ssx_integrate.hpp"
 
 
 using Eigen::Matrix3d;

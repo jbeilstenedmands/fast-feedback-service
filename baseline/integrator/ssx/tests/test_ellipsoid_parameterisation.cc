@@ -2,7 +2,7 @@
 #include <math.h>
 
 #include <Eigen/Dense>
-#include "ellipsoid_parameterisation.hpp"
+#include "../ellipsoid_parameterisation.hpp"
 
 using Eigen::Matrix3d;
 using Vector6d = Eigen::Matrix<double, 6, 1>;
