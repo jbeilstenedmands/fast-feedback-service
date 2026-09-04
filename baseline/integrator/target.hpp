@@ -18,7 +18,6 @@ public:
         const Simple6MosaicityParameterisation& model,
         const Eigen::Matrix3d& A,
         const Eigen::Vector3d& s0,
-        const std::vector<Eigen::Vector3d>& xyzcal_px,
         const std::vector<Eigen::Vector3d>& xyzobs_px,
         const std::vector<Eigen::Vector3d>& covariances,
         const std::vector<double>& intensities,
@@ -55,6 +54,29 @@ private:
     const Simple6MosaicityParameterisation& model_;
 
     ReflectionList data_;
+
+    std::vector<double> damp_outlier_intensity_weights(const std::vector<double>& values) {
+        if (values.empty()) {
+            return {};
+        }
+
+        auto damped = values;
+        auto sorted = values;
+        std::ranges::sort(sorted);
+        const std::size_t n = sorted.size();
+        const double q1 = sorted[n / 4];
+        const double q3 = sorted[(3 * n) / 4];
+        const double iqr = q3 - q1;
+        const double threshold = q3 + 1.5 * iqr;
+
+        for (auto& value : damped) {
+            if (value > threshold) {
+                value = threshold;
+            }
+        }
+
+        return damped;
+    }
 };
 
 MaximumLikelihoodTarget::MaximumLikelihoodTarget(
@@ -72,6 +94,7 @@ MaximumLikelihoodTarget::MaximumLikelihoodTarget(
 {
     const std::size_t n = miller_indices.size();
     data_.reserve(n);
+    std::vector<double> damped_intensities = damp_outlier_intensity_weights(intensities);
 
     for (std::size_t i = 0; i < n; ++i) {
         Eigen::Matrix2d sobs;
@@ -82,7 +105,7 @@ MaximumLikelihoodTarget::MaximumLikelihoodTarget(
             s0,
             sp_list[i],
             miller_indices[i],
-            intensities[i],
+            damped_intensities[i],
             mobs[i],
             sobs);
     }
@@ -92,7 +115,6 @@ MaximumLikelihoodTarget::MaximumLikelihoodTarget(
     const Simple6MosaicityParameterisation& model,
     const Eigen::Matrix3d& A,
     const Eigen::Vector3d& s0,
-    const std::vector<Eigen::Vector3d>& xyzcal_px,
     const std::vector<Eigen::Vector3d>& xyzobs_px,
     const std::vector<Eigen::Vector3d>& covariances,
     const std::vector<double>& intensities,
@@ -105,38 +127,23 @@ MaximumLikelihoodTarget::MaximumLikelihoodTarget(
 {
     const std::size_t n = miller_indices.size();
     double s0_length = s0.norm();
-    /*assert xyzcal_mm.size() == n;
-    DIALS_ASSERT(xyzobs_mm.size() == n);
-    DIALS_ASSERT(covariances.size() == n);
-    DIALS_ASSERT(intensities.size() == n);*/
-
     data_.reserve(n);
+    std::vector<double> damped_intensities = damp_outlier_intensity_weights(intensities);
 
     for (std::size_t i = 0; i < n; ++i) {
-
-        // FIXME is mobs, s1 in mm?
-        auto [xmm, ymm] = panel.px_to_mm(xyzcal_px[i][0], xyzcal_px[i][1]);
-        Vector3d s1cal = panel.get_lab_coord(xmm, ymm);
-        s1cal.normalize();
-        s1cal = s1cal * s0_length;
         auto [xomm, yomm] = panel.px_to_mm(xyzobs_px[i][0], xyzobs_px[i][1]);
-        Vector3d s1obs = panel.get_lab_coord(xomm, yomm);
-        s1obs.normalize();
-        s1obs = s1obs * s0_length;
-
-        //Eigen::Vector2d mobs = s1obs.head<2>();
+        Vector3d sp = panel.get_lab_coord(xomm, yomm);
+        sp.normalize();
+        sp = sp * s0_length;
         Eigen::Matrix2d sobs;
         sobs << covariances[i][0], covariances[i][2],covariances[i][2], covariances[i][1];
-
-        //std::cout << "Sobs " << sobs << " mobs " << mobs << " s1cal " << s1cal << std::endl;
-
         data_.emplace_back(
             model_,
             A,
             s0,
-            s1cal,
+            sp,
             miller_indices[i],
-            intensities[i],
+            damped_intensities[i],
             mobs[i],
             sobs);
     }
