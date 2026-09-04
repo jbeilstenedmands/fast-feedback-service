@@ -13,8 +13,14 @@
 #include <iostream>
 #include <fstream>
 #include "../ssx_integrate.hpp"
+#include "../ellipsoid_parameterisation.hpp"
+#include "integrator/sigma_estimation.hpp"
+#include "../calculations.hpp"
+#include "../fisher_scoring_ml.hpp"
+#include "../target.hpp"
 
-
+using Matrix3d = Eigen::Matrix3d;
+using Vector2d = Eigen::Vector2d;
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
 using json = nlohmann::json;
@@ -238,4 +244,11 @@ TEST(BaselineIntegrator, ssxintegratetest) {
  |          11 |      31967.2 | 0.557, 0.676       |
  |          12 |      31967.2 | 0.557, 0.676       |
  +-------------+--------------+--------------------+*/
+
+    /**
+    Invariant crystal mosaicity:
+    M1 : 80.1153 muA^-1
+    M2 : 629.709 muA^-1
+    M3 : 724.904 muA^-1
+    */
 }
