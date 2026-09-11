@@ -16,7 +16,7 @@
 #include <mutex>
 #include <optional>
 #include <stdexcept>
-
+#include <iostream>
 #include "ffs_logger.hpp"
 #include "predictor/index_generators.hpp"
 #include "predictor/ray_predictors.hpp"
@@ -27,6 +27,11 @@ using json = nlohmann::json;
 
 using Eigen::Matrix3d;
 using Eigen::Vector3d;
+using Matrix3d = Eigen::Matrix3d;
+using Vector3d = Eigen::Vector3d;
+using Vec2 = Eigen::Vector2d;
+using Mat2 = Eigen::Matrix2d;
+
 
 predicted_data_rotation predict_single_image(
   const int image_index,
@@ -125,6 +130,115 @@ predicted_data_rotation predict_single_image(
         }
     }
     return output_data_this_image;
+}
+
+double AT_B_A(Vector3d A, Matrix3d B) {
+  return A.transpose() * (B * A);
+}
+
+Eigen::Matrix3d compute_change_of_basis_operation_2(
+    const Eigen::Vector3d& s0,
+    const Eigen::Vector3d& s2)
+{
+    const Eigen::Vector3d e1 = s2.cross(s0).normalized();
+    const Eigen::Vector3d e2 = s2.cross(e1).normalized();
+    const Eigen::Vector3d e3 = s2.normalized();
+
+    Eigen::Matrix3d R;
+    R <<
+        e1.x(), e1.y(), e1.z(),
+        e2.x(), e2.y(), e2.z(),
+        e3.x(), e3.y(), e3.z();
+    return R;
+}
+
+predicted_data_stills predict_still(Matrix3d sigma,
+                                        const Vector3d s0,
+                                      const Detector &detector,
+                                      const Matrix3d A,
+                                    gemmi::GroupOps crystal_symmetry_operations){
+
+    // Invert the matrix - fixed sigma for constant sigma model e.g. Simple6
+    // needs to change if have angular
+    Matrix3d sigma_inv = sigma.inverse();
+
+    predicted_data_stills results;
+    // Our stills index generator doesn't have a dmin
+    // Try to implement the simpler one from dials?
+    StillsIndexGenerator index_generator(A, crystal_symmetry_operations, s0, s0, 0.01);
+
+    // Hardcode quantile value for now
+    double quantile = 0.9973; // 3sigma
+    double s0_length = s0.norm();
+    int n=0;
+
+    for (;;) {
+        std::optional<std::array<int, 3>> index = index_generator.next();
+        if (!index) {
+          std::cout << "generated " << n << std::endl;
+          break;
+        }
+        n += 1;
+        std::array<int, 3> h = index.value();
+        const Vector3d hkl_vec{(double)h[0], (double)h[1], (double)h[2]};
+
+        // Compute the point and the distance from the Ewald sphere
+        Vector3d r = A * hkl_vec;
+        Vector3d s2 = s0 + r;
+        Vector3d s2_normalized = s2.normalized();
+        Vector3d s3 = s2_normalized * s0_length;
+
+        // Compute distance
+        double d = AT_B_A(s3 - s2, sigma_inv);
+
+        // If it is close enough then predict stuff
+        if (d < quantile) {
+          // Compute the rotation of the reflection
+          Matrix3d R = compute_change_of_basis_operation_2(s0, s2);
+
+          // Rotate the covariance matrix and s2 vector
+          Matrix3d S = R * sigma * R.transpose();
+          Vector3d mu = R * s2;
+
+          // Partition the covariance matrix
+          Mat2 S11 = S.block<2,2>(0,0);
+          Eigen::Vector2d S12 = S.block<2,1>(0,2);
+          Eigen::RowVector2d S21 = S.block<1,2>(2,0);
+          double S22 = S(2,2);
+
+          // Partition the mean vector
+          Vec2 mu1 = mu.head<2>();
+          double mu2 = mu(2);
+
+          // Compute epsilon the distance to the Ewald sphere
+          double epsilon = s0_length - mu2;
+
+          // Compute the mean of the conditional distribution
+          Vec2 mubar = mu1 + S12 * (epsilon / S22);
+
+          // Compute the diffracted beam vector
+          Vector3d v(mubar[0], mubar[1], s0_length);
+          v.normalize();
+          Vector3d s1 = R.transpose() * (v * s0_length);
+
+          auto impact = detector.get_ray_intersection(s1);
+          if (!impact.has_value()) continue;
+          intersection result = impact.value();
+            auto panel = result.panel_id;
+          std::array<double, 3> coords_mm = {
+              result.xymm[0], result.xymm[1], 0.5 * M_PI / 180};
+          std::array<double, 2> xycoords_px =
+            detector.panels()[panel].mm_to_px(coords_mm[0], coords_mm[1]);
+          std::array<double, 3> coords_px = {xycoords_px[0], xycoords_px[1], 0.5};
+          std::array<double, 3> s1_array = {s1[0], s1[1], s1[2]};
+          std::array<double, 3> s2_array = {s2[0], s2[1], s2[2]};
+          
+          results.add(
+            h, s1_array, s2_array, coords_px, coords_mm, panel, false, predicted_flag
+          );
+        }
+      }
+  return results;
 }
 
 predicted_data_rotation predict_rotation(Experiment &experiment,

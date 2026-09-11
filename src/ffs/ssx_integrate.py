@@ -133,6 +133,8 @@ def run(args=None):
 
     t1 = time.time()
 
+    # First make median cell and then do index generation once?
+
     for t, i, xtal in zip(tables, id_values, crystals):
         # data already has an initial prediction.
         xyzobs_this, xyzcal_this, covars_this, intensities_this, miller_index_this, mobs_this = t

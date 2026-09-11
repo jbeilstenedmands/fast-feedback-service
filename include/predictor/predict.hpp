@@ -62,6 +62,51 @@ struct predicted_data_rotation {
     }
 };
 
+struct predicted_data_stills {
+    // Shape {size, 3}
+    std::vector<int> hkl;
+    std::vector<double> s1;
+    std::vector<double> s2;
+    std::vector<double> xyz_px;
+    std::vector<double> xyz_mm;
+    // Shape {size, 1}
+    std::vector<int> panels;
+    std::vector<bool> enter;
+    std::vector<size_t> flags;
+    std::vector<int> ids;
+    std::vector<uint64_t> experiment_ids;
+    std::vector<std::string> identifiers;
+
+    void add(const std::array<int, 3> &hkl_entry,
+             const std::array<double, 3> &s1_entry,
+             const std::array<double, 3> &s2_entry,
+             const std::array<double, 3> &xyz_px_entry,
+             const std::array<double, 3> &xyz_mm_entry,
+             int panel,
+             bool enter_flag,
+             size_t flag) {
+        hkl.insert(hkl.end(), hkl_entry.begin(), hkl_entry.end());
+        s1.insert(s1.end(), s1_entry.begin(), s1_entry.end());
+        s2.insert(s2.end(), s2_entry.begin(), s2_entry.end());
+        xyz_px.insert(xyz_px.end(), xyz_px_entry.begin(), xyz_px_entry.end());
+        xyz_mm.insert(xyz_mm.end(), xyz_mm_entry.begin(), xyz_mm_entry.end());
+        panels.push_back(panel);
+        enter.push_back(enter_flag);
+        flags.push_back(flag);
+    }
+
+    void merge(predicted_data_stills &&other) {
+        hkl.insert(hkl.end(), other.hkl.begin(), other.hkl.end());
+        s1.insert(s1.end(), other.s1.begin(), other.s1.end());
+        s2.insert(s2.end(), other.s2.begin(), other.s2.end());
+        xyz_px.insert(xyz_px.end(), other.xyz_px.begin(), other.xyz_px.end());
+        xyz_mm.insert(xyz_mm.end(), other.xyz_mm.begin(), other.xyz_mm.end());
+        panels.insert(panels.end(), other.panels.begin(), other.panels.end());
+        enter.insert(enter.end(), other.enter.begin(), other.enter.end());
+        flags.insert(flags.end(), other.flags.begin(), other.flags.end());
+    }
+};
+
 struct scan_varying_data {
     std::vector<Eigen::Vector3d> s0_at_scan_points;
     std::vector<Eigen::Matrix3d> A_at_scan_points;
@@ -69,6 +114,12 @@ struct scan_varying_data {
 
     auto operator<=>(const scan_varying_data &) const = default;
 };
+
+predicted_data_stills predict_still(Matrix3d sigma,
+                                        const Vector3d s0,
+                                      const Detector &detector,
+                                      const Matrix3d A,
+                                    gemmi::GroupOps crystal_symmetry_operations);
 
 predicted_data_rotation predict_single_image(
   const int image_index,

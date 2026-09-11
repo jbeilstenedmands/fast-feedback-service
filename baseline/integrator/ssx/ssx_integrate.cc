@@ -6,6 +6,7 @@
 #include <cmath>
 #include <math/math_utils.cuh>
 #include <vector>
+#include "predictor/predict.hpp"
 
 using Matrix3d = Eigen::Matrix3d;
 using Vector2d = Eigen::Vector2d;
@@ -96,4 +97,17 @@ void ssx_integrate(const std::vector<Vector3d>& xyzcal_px,
     scorer.solve();
     Matrix3d sigma = model.sigma();
     print_eigen_values_and_vectors_static(sigma);
+
+    // now predict
+    gemmi::SpaceGroup space_group = *gemmi::find_spacegroup_by_name("P1");
+    gemmi::GroupOps crystal_symmetry_operations = space_group.operations();
+
+    // Make detector from panel
+    std::vector<Panel> panels;
+    panels.push_back(panel);
+    const Detector detector(panels);
+    
+    predicted_data_stills results = predict_still(sigma, s0, detector, A, crystal_symmetry_operations);
+    std::cout << "predicted " << results.hkl.size() / 3 << std::endl;
+
 }

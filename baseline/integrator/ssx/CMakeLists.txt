@@ -18,6 +18,7 @@ target_link_libraries(ssx_integrator PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     ffs_common
+    predictor
 )
 
 nanobind_add_module(integrate
