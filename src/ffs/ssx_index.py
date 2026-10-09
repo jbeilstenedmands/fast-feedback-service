@@ -30,6 +30,7 @@ class IndexedLatticeResult(BaseModel):
     s1: list[float] | None = None
     delpsi: list[float] | None = None
     rmsds: list[float] | None = None
+    selection_for_input: list[bool] | None = None
 
 
 class IndexingResult(BaseModel):
@@ -152,6 +153,7 @@ class GPUIndexer:
                         s1=ssx_index_result.s1,
                         delpsi=ssx_index_result.delpsi,
                         rmsds=ssx_index_result.rmsds,
+                        selection_for_input=ssx_index_result.selection_for_input,
                     )
                 ],
                 n_unindexed=n_unindexed,
@@ -171,6 +173,8 @@ class OutputAggregator:
         self.xyzobs_output = []
         self.xyzcal_px_output = []
         self.delpsical_output = []
+        self.intensities = []
+        self.bboxes = []
         self.ids_output = []
         self.s1_output = []
         self.image_nos_output = []
@@ -181,7 +185,7 @@ class OutputAggregator:
         self.output_crystals_id_nos = []
         self.identifiers_map = identifiers_map
 
-    def add_result(self, lattice, i):
+    def add_result(self, lattice, i, spot_intensities, original_bboxes):
         A = np.reshape(np.array(lattice.A_matrix, dtype="float64"), (3, 3))
         A_inv = np.linalg.inv(A)
         self.output_crystals_list.append(
@@ -197,6 +201,8 @@ class OutputAggregator:
         midx = np.array(lattice.miller_indices, dtype=int).reshape(-1, 3)
         xyzobs = np.array(lattice.xyzobs_px).reshape(-1, 3)
         xyzcal = np.array(lattice.xyzcal_px).reshape(-1, 3)
+        intensities = spot_intensities[lattice.selection_for_input]
+        bboxes = original_bboxes[lattice.selection_for_input,:]
         s1_reshape = np.array(lattice.s1).reshape(-1, 3)
         delpsi = np.array(lattice.delpsi)
         rmsdx, rmsdy, rmsd_psi = lattice.rmsds
@@ -208,11 +214,24 @@ class OutputAggregator:
         self.xyzobs_output.append(xyzobs)
         self.xyzcal_px_output.append(xyzcal)
         self.delpsical_output.append(np.array(delpsi))
+        self.intensities.append(intensities)
+        self.bboxes.append(bboxes)
         self.s1_output.append(s1_reshape)
         self.ids_output.append(np.full(n, self.output_id, dtype=np.int32))
         self.image_nos_output.append(np.full(n, i, dtype=np.int32))
         self.new_id_to_old_id[self.output_id] = i
         self.output_id += 1
+        self.output_experiment_ids = None
+        self.output_experiment_identifiers = None
+
+    def set_output_identifiers(self):
+        self.output_experiment_ids = sorted(
+            list(set(np.uint(i) for i in self.new_id_to_old_id.keys()))
+        )
+        self.output_experiment_identifiers = [
+            self.identifiers_map[self.new_id_to_old_id[i]] for i in self.output_experiment_ids
+        ]
+
 
     def write_table(self, filename):
         with h5py.File(Path.cwd() / filename, "w") as output_refl:
@@ -227,15 +246,14 @@ class OutputAggregator:
             group["miller_index"] = np.concatenate(
                 self.miller_indices_output, dtype=np.int32
             )
-            sorted_ids = sorted(
-                list(set(np.uint(i) for i in self.new_id_to_old_id.keys()))
-            )
-            group.attrs["experiment_ids"] = sorted_ids
-            identifiers = [
-                self.identifiers_map[self.new_id_to_old_id[i]] for i in sorted_ids
-            ]
-            group.attrs["identifiers"] = identifiers
+            group["intensity.sum.value"] = np.concatenate(self.intensities)
+            group["bbox"] = np.concatenate(self.bboxes)
+            if not self.output_experiment_identifiers:
+                self.set_output_identifiers()
+            group.attrs["experiment_ids"] = self.output_experiment_ids
+            group.attrs["identifiers"] = self.output_experiment_identifiers
             group["panel"] = np.zeros_like(ids_array, dtype=np.uint)
+            group["flags"] = np.array(np.full(ids_array.size, 45, dtype=np.uint)) #strong && predicted && indexed && used_in_refinement
             ## extra potential data to output to enable further processing:
             ## rlp, flags, xyzobs.mm.value
 
@@ -300,6 +318,8 @@ def run(args=None):
         with h5py.File(parsed.reflections, "r") as refls:
             processing_group = refls["dials"]["processing"]["group_0"]
             xyzs = processing_group["xyzobs.px.value"][:]
+            intensities = processing_group["intensity.sum.value"][:]
+            bboxes = processing_group["bbox"][:]
             ids = processing_group["id"][:]
             experiment_ids = processing_group.attrs["experiment_ids"]
             identifiers = processing_group.attrs["identifiers"]
@@ -329,7 +349,7 @@ def run(args=None):
         return
 
     output_aggregator = OutputAggregator(identifiers_map)
-    tables = []
+    input_data_arrays = []
     id_values = []
 
     ## Note this assumes ids are in ascending order, which is the
@@ -338,8 +358,10 @@ def run(args=None):
     end_indices = np.append(start_indices[1:], len(ids))
     for id_, start, end in zip(unique_ids, start_indices, end_indices):
         xyzs_this = xyzs[start:end]
+        intensities_this = intensities[start:end]
+        bboxes_this = bboxes[start:end]
         if xyzs_this.any():
-            tables.append(xyzs_this)
+            input_data_arrays.append((xyzs_this, intensities_this, bboxes_this))
             id_values.append(id_)
 
     ## Initialise the GPU indexer.
@@ -363,28 +385,30 @@ def run(args=None):
 
     # Quantities to log for log output
     n_indexed_images = 0
-    n_total = len(tables)
+    n_total = len(input_data_arrays)
     n_considered = 0
 
     t1 = time.time()
 
-    for t, i in zip(tables, id_values):
-        data = t.flatten()
-        if t.shape[0] < min_spots:
+    for data_arrays, i in zip(input_data_arrays, id_values):
+        xyz_data = data_arrays[0]
+        spot_intensities = data_arrays[1]
+        spot_bboxes = data_arrays[2]
+        if xyz_data.shape[0] < min_spots:
             continue
         n_considered += 1
-        data = t.flatten()
-        result = indexer.index(data)
+        xyz_data = xyz_data.flatten()
+        result = indexer.index(xyz_data)
         if result.lattices:
             n_indexed_images += 1
             lattice = result.lattices[0]
             # now save stuff for output
-            output_aggregator.add_result(lattice, i)
+            output_aggregator.add_result(lattice, i, spot_intensities, spot_bboxes)
             # print number of spots indexed and rmsds
             rmsdx, rmsdy, rmsd_psi = lattice.rmsds
             cell_str = ", ".join(f"{i:.3f}" for i in lattice.unit_cell)
             print(
-                f"Indexed {(lattice.n_indexed)}/{int(data.size / 3)} spots on image {i + 1}:\n"
+                f"Indexed {(lattice.n_indexed)}/{int(xyz_data.size / 3)} spots on image {i + 1}:\n"
                 + f"  cell: {cell_str}\n"
                 + f"  RMSDs: (x(px), y(px), psi(rad)): {rmsdx:.3f}, {rmsdy:.3f}, {rmsd_psi:.5f}"
             )
@@ -412,6 +436,10 @@ def run(args=None):
                 expts_to_remove.append(i)
         for i in expts_to_remove[::-1]:
             del expts["experiment"][i]
+        # now set the identifiers correctly
+        output_aggregator.set_output_identifiers()
+        for i, identifier in enumerate(output_aggregator.output_experiment_identifiers):
+            expts["experiment"][i]["identifier"] = identifier
         with open("indexed.expt", "w") as f:
             json.dump(expts, f, indent=2)
 
