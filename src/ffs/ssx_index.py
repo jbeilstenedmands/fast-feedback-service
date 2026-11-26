@@ -7,10 +7,12 @@ Usage: ./build/bin/ssx_index -r results_ffs.h5 -e imported.expt -c 79 79 38 90 9
 
 import argparse
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+import logging
 
 import gemmi
 import h5py
@@ -24,6 +26,32 @@ import ffs.index
 DIALS_FILE_TYPE = "dials_processed_data"
 DIALS_FILE_VERSION = 1
 
+logger = logging.getLogger("ssx_index")
+
+def setup_logger(
+    filename: str | None = None,
+    level: str | None = None
+) -> None:
+    # Convert string to logging constant
+    loglevel = getattr(logging, (level or "INFO").upper(), logging.INFO)
+    logger.setLevel(loglevel)
+
+    formatter = logging.Formatter(
+        "[%(asctime)s] [PID:%(process)d] "
+        "[%(levelname)s] [%(filename)s:%(lineno)d] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(loglevel)
+    console.setFormatter(formatter)
+    logger.addHandler(console)
+    
+    if filename:
+        fh = logging.FileHandler(filename, mode="w", encoding="utf-8")
+        fh.setFormatter(formatter)
+        fh.setLevel(loglevel)
+        logger.addHandler(fh)
 
 @dataclass(slots=True)
 class InputArrays:
@@ -309,10 +337,13 @@ def run(args=None):
     )
 
     parsed = parser.parse_args(args)
+
+    setup_logger("ffs.ssx_index.log", level=os.getenv("LOG_LEVEL"))
+    
     min_spots = parsed.min_spots
     output_summary = parsed.output_summary
     if not parsed.experiments:
-        print("No imported experiment list provided.")
+        logger.info("No imported experiment list provided.")
         return
     with open(parsed.experiments, "r") as f:
         expts = json.load(f)
@@ -341,7 +372,7 @@ def run(args=None):
     )  ## As an orthogonalisation matrix.
 
     if not parsed.reflections:
-        print("No strong reflections h5 file provided.")
+        logger.info("No strong reflections h5 file provided.")
         return
     try:
         with h5py.File(parsed.reflections, "r") as refls:
@@ -359,7 +390,7 @@ def run(args=None):
             bboxes = processing_group["bbox"][:]
             spot_mobs = processing_group["spot_mobs_2d"][:]
     except Exception as e:
-        print(
+        logger.info(
             f"Unable to interpret the reflection file - please check input.\n Error: {e}"
         )
         return
@@ -377,7 +408,7 @@ def run(args=None):
             detector["mu"],
         )
     except Exception as e:
-        print(
+        logger.info(
             f"Unable to compose a detector panel model from the detector json.\n Error: {e}"
         )
         return
@@ -420,14 +451,14 @@ def run(args=None):
     try:
         indexer = GPUIndexer()
     except ModuleNotFoundError as e:  # if ffbidx not sourced
-        print(f"ModuleNotFoundError: {e}")
-        print(
+        logger.info(f"ModuleNotFoundError: {e}")
+        logger.info(
             "ffbidx not found, has the fast-feedback-indexer module been built and sourced?"
         )
         return
     except ImportError as e:
-        print(f"ImportError: {e}")
-        print(
+        logger.info(f"ImportError: {e}")
+        logger.info(
             "Potential source of this error: has the CUDA Runtime Library been loaded?"
         )
         return
@@ -460,10 +491,10 @@ def run(args=None):
             # print number of spots indexed and rmsds
             rmsdx, rmsdy, rmsd_psi = lattice.rmsds
             cell_str = ", ".join(f"{i:.3f}" for i in lattice.unit_cell)
-            print(
+            logger.info(
                 f"Indexed {(lattice.n_indexed)}/{int(n_spots)} spots on image {data_arrays.id_value + 1}:\n"
-                + f"  cell: {cell_str}\n"
-                + f"  RMSDs: (x(px), y(px), psi(rad)): {rmsdx:.3f}, {rmsdy:.3f}, {rmsd_psi:.5f}"
+                + f"    Cell: {cell_str}\n"
+                + f"    RMSDs: (x(px), y(px), psi(rad)): {rmsdx:.3f}, {rmsdy:.3f}, {rmsd_psi:.5f}"
             )
             if output_summary:
                 summary_this["n_indexed"] = lattice.n_indexed
@@ -471,13 +502,13 @@ def run(args=None):
                 summary_this["RMSD_Y"] = rmsdy
                 summary_this["RMSD_dPsi"] = rmsd_psi
         else:
-            print(f"No indexing solution for image {data_arrays.id_value + 1}")
+            logger.info(f"No indexing solution for image {data_arrays.id_value + 1}")
 
     t2 = time.time()
-    print(
+    logger.info(
         f"Indexing attempted on {n_considered}/{n_total} non-empty images with >= {min_spots} spots"
     )
-    print(f"Indexed {n_indexed_images}/{n_total} non-empty images in {t2 - t1:.3f}s")
+    logger.info(f"Indexed {n_indexed_images}/{n_total} non-empty images in {t2 - t1:.3f}s")
 
     # ideally would generate an indexed.expt type file...
     # ok say we have in imported.expt, need to add crystals to indexed images
@@ -504,11 +535,11 @@ def run(args=None):
 
     # output in standard dials format so that can be understood by dials.
     if not output_aggregator.ids_output:
-        print("No images successfully indexed, no reflection output will be written.")
+        logger.info("No images successfully indexed, no reflection output will be written.")
     else:
         output_aggregator.write_table("indexed.refl")
     t3 = time.time()
-    print(
+    logger.info(
         f"Setup time: {t1 - st:.3f}s, index time {t2 - t1:.3f}s, write time {t3 - t2:.3f}s"
     )
 
@@ -516,4 +547,4 @@ def run(args=None):
 if __name__ == "__main__":
     st = time.time()
     run(sys.argv[1:])
-    print(f"Program time: {time.time() - st:.3f}s")
+    logger.info(f"Program time: {time.time() - st:.3f}s")
