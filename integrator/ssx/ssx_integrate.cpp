@@ -4,6 +4,7 @@
 #include <experimental/mdspan>
 #include <math/math_utils.cuh>
 #include <vector>
+#include <iostream>
 
 #include "fisher_scoring_max_likelihood.hpp"
 #include "integrator/extent.hpp"
@@ -42,6 +43,12 @@ Simple6MosaicityParameterisation refine_mosaicity(
             keep.push_back(i);
         }
     }
+    if (keep.size() < 8){
+      // Return a null model
+      std::cout << "Unable to refine as only " << keep.size() << " reflections remain after filtering\n" << std::endl;
+      return Simple6MosaicityParameterisation::from_sigma_d(0);
+    }
+
     // Now make filtered arrays - redo this to be smart and do nothing if no data filtered out?
     std::vector<double> intensities_f;
     std::vector<Vector3d> covariances_f;
@@ -99,8 +106,13 @@ Simple6MosaicityParameterisation refine_mosaicity(
       model, A, s0, sp_list, covariances_f, intensities_f, miller_indices_f, mobs_f);
     FisherScoringMaximumLikelihood scorer =
       FisherScoringMaximumLikelihood(model, target);
-    scorer.solve();
-    Matrix3d sigma = model.sigma();
+    try {
+        scorer.solve();
+    } catch (const std::exception &e) {
+        std::cout << "Mosaicity refinement failed: " << e.what() << " ." <<std::endl;
+        return Simple6MosaicityParameterisation::from_sigma_d(0);
+    }
+    //Matrix3d sigma = model.sigma();
     return model;
 }
 
